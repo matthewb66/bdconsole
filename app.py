@@ -33,9 +33,32 @@ def get_project_data():
 def get_versions_data(proj):
     res = hub.execute_get(proj + '/versions')
     if res.status_code != 200:
-        sys.exit(3)
+        return None
     vers = res.json()
-    return pd.json_normalize(vers, record_path=['items'])
+    df = pd.json_normalize(vers, record_path=['items'])
+    # df['scan_dep'] = False
+    # df['scan_sig'] = False
+    # df['scan_snip'] = False
+    # df['scan_bin'] = False
+    #
+    # index = 0
+    # for ver in vers['items']:
+    #     link = next((item for item in ver['_meta']['links'] if item["rel"] == "codelocations"), None)
+    #     if link != '':
+    #         cl = hub.execute_get(link['href'])
+    #         if cl.status_code != 200:
+    #             return None
+    #         cls = cl.json()
+    #         for cl in cls['items']:
+    #             if 'scanSize' in cl and cl['scanSize'] > 0:
+    #                 if 'name' in cl and cl['name'].endswith(' scan'):
+    #                     df.loc[index, 'scan_sig'] = True
+    #             if 'name' in cl and cl['name'].endswith(' bom'):
+    #                 df.loc[index, 'scan_dep'] = True
+    #
+    #     index += 1
+
+    return df
 
 
 app = dash.Dash(external_stylesheets=[dbc.themes.COSMO])
@@ -157,7 +180,7 @@ def create_vertable(verdata):
             {
                 column: {'value': str(value), 'type': 'markdown'}
                 for column, value in row.items()
-                } for row in verdata.to_dict('records')
+            } for row in verdata.to_dict('records')
         ],
         tooltip_duration=None,
         style_data_conditional=[
@@ -213,7 +236,7 @@ def create_compstab(compdata):
         dbc.Col(
             [
                 html.H2("Components"),
-                html.H2("Project: " + projname + " Version: " + vername),
+                html.H4("Project: " + projname + " Version: " + vername),
                 dash_table.DataTable(
                     id='compstable',
                     columns=col_data_comps,
@@ -298,7 +321,7 @@ def create_snippetstab(snippetcsv):
     return dbc.Row(
         dbc.Col(
             [
-                html.H2("Snippets"),
+                html.H2("Unconfirmed Snippets"),
                 html.H4("Project: " + projname + " Version: " + vername),
                 dash_table.DataTable(
                     id='sniptable',
@@ -489,7 +512,8 @@ app.layout = dbc.Container(
                                                             dbc.Checklist(
                                                                 id="spdx_recursive",
                                                                 options=[
-                                                                    {"label": "Recursive", "value": 1},
+                                                                    {"label": "Recursive (Projects in Projects)",
+                                                                     "value": 1},
                                                                 ],
                                                                 value=[],
                                                                 switch=True,
