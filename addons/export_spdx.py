@@ -6,13 +6,13 @@ import sys
 import datetime
 import os
 import re
-# from lxml import html
-# import requests
+from lxml import html
+import requests
 # from zipfile import ZipFile
 
 from blackduck.HubRestApi import HubInstance
 
-script_version = "0.21 Beta"
+script_version = "0.22 Beta"
 
 logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', stream=sys.stderr, level=logging.INFO)
 logging.getLogger("requests").setLevel(logging.WARNING)
@@ -217,30 +217,30 @@ def backup_file(filename):
 
 
 def openhub_get_download(oh_url):
-	# try:
-	# 	page = requests.get(oh_url)
-	# 	tree = html.fromstring(page.content)
-    #
-	# 	link = ""
-	# 	enlistments = tree.xpath("//a[text()='Project Links:']//following::a[text()='Code Locations:']//@href")
-	# 	if len(enlistments) > 0:
-	# 		enlist_url = "https://openhub.net" + str(enlistments[0])
-	# 		enlist_page = requests.get(enlist_url)
-	# 		enlist_tree = html.fromstring(enlist_page.content)
-	# 		link = enlist_tree.xpath("//tbody//tr[1]//td[1]/text()")
-    #
-	# 	if len(link) > 0:
-	# 		sp = str(link[0].split(" ")[0]).replace('\n', '')
-	# 		#
-	# 		# Check format
-	# 		protocol = sp.split('://')[0]
-	# 		if protocol in ['https', 'http', 'git']:
-	# 			return sp
-    #
-	# except Exception as exc:
-	# 	print('ERROR: Cannot get openhub data\n' + str(exc))
-	# 	return "NOASSERTION"
-    #
+	try:
+		page = requests.get(oh_url)
+		tree = html.fromstring(page.content)
+
+		link = ""
+		enlistments = tree.xpath("//a[text()='Project Links:']//following::a[text()='Code Locations:']//@href")
+		if len(enlistments) > 0:
+			enlist_url = "https://openhub.net" + str(enlistments[0])
+			enlist_page = requests.get(enlist_url)
+			enlist_tree = html.fromstring(enlist_page.content)
+			link = enlist_tree.xpath("//tbody//tr[1]//td[1]/text()")
+
+		if len(link) > 0:
+			sp = str(link[0].split(" ")[0]).replace('\n', '')
+			#
+			# Check format
+			protocol = sp.split('://')[0]
+			if protocol in ['https', 'http', 'git']:
+				return sp
+
+	except Exception as exc:
+		print('ERROR: Cannot get openhub data\n' + str(exc))
+		return "NOASSERTION"
+
 	return "NOASSERTION"
 
 
@@ -272,12 +272,11 @@ def get_licenses(lcomp):
 					resp = hub.execute_get(lic_url, custom_headers=custom_headers)
 					lic_text = resp.content.decode("utf-8")
 					if thislic not in spdx_custom_lics:
-						spdx["hasExtractedLicensingInfos"].append(
-							{
-								'licenseID': quote(thislic),
-								'extractedText': quote(lic_text),
-							}
-						)
+						mydict = {
+							'licenseID': quote(thislic),
+							'extractedText': quote(lic_text)
+						}
+						spdx["hasExtractedLicensingInfos"].append(mydict)
 						spdx_custom_lics.append(thislic)
 				except Exception as exc:
 					pass
@@ -511,8 +510,8 @@ def process_children(compverurl, child_url, indenttext):
 			process_children(child['componentVersion'], thisref[0], "    " + indenttext)
 
 	if 'children' in compsdict[compverurl].keys():
-		compsdict[compverurl]['children'].append(children)
-		compsdict[compverurl]['matchtypes'].append(thismatchtypes)
+		compsdict[compverurl]['children'].extend(children)
+		compsdict[compverurl]['matchtypes'].extend(thismatchtypes)
 	else:
 		compsdict[compverurl]['children'] = children
 		compsdict[compverurl]['matchtypes'] = thismatchtypes
@@ -523,9 +522,12 @@ def process_children(compverurl, child_url, indenttext):
 def add_snippet():
 	# "snippets": [{
 	# 	"SPDXID": "SPDXRef-Snippet",
-	# 	"comment": "This snippet was identified as significant and highlighted in this Apache-2.0 file, when a commercial scanner identified it as being derived from file foo.c in package xyz which is licensed under GPL-2.0.",
+	# 	"comment": "This snippet was identified as significant and highlighted in this Apache-2.0 file, when a
+	# 	commercial scanner identified it as being derived from file foo.c in package xyz which is licensed under
+	# 	GPL-2.0.",
 	# 	"copyrightText": "Copyright 2008-2010 John Smith",
-	# 	"licenseComments": "The concluded license was taken from package xyz, from which the snippet was copied into the current file. The concluded license information was found in the COPYING.txt file in package xyz.",
+	# 	"licenseComments": "The concluded license was taken from package xyz, from which the snippet was copied
+	# 	into the current file. The concluded license information was found in the COPYING.txt file in package xyz.",
 	# 	"licenseConcluded": "GPL-2.0-only",
 	# 	"licenseInfoInSnippets": ["GPL-2.0-only"],
 	# 	"name": "from linux kernel",
@@ -556,26 +558,28 @@ def add_snippet():
 def report_children(parentverurl, parentpackage, mtypes, children):
 	global compsdict
 	global spdx
+	global processed_list
 
 	for child in children:
-		if child == parentverurl:
-			continue
 		reln = False
-		for tchecktype in matchtype_depends_dict.keys():
-			if tchecktype in mtypes:
-				add_relationship(parentpackage, compsdict[child]['spdxname'], matchtype_depends_dict[tchecktype])
-				reln = True
-				break
-		if not reln:
-			for tchecktype in matchtype_contains_dict.keys():
+		if compver not in processed_list:
+			for tchecktype in matchtype_depends_dict.keys():
 				if tchecktype in mtypes:
-					add_relationship(parentpackage, compsdict[child]['spdxname'], matchtype_contains_dict[tchecktype])
+					add_relationship(parentpackage, compsdict[child]['spdxname'], matchtype_depends_dict[tchecktype])
+					reln = True
 					break
+			if not reln:
+				for tchecktype in matchtype_contains_dict.keys():
+					if tchecktype in mtypes:
+						add_relationship(parentpackage, compsdict[child]['spdxname'], matchtype_contains_dict[tchecktype])
+						break
+			processed_list.append(compver)
 
-		centry = compsdict[child]
-		spdx['packages'].append(centry['spdxentry'])
-		if 'children' in centry:
-			report_children(child, centry['spdxname'], centry['matchtypes'], centry['children'])
+			centry = compsdict[child]
+			spdx['packages'].append(centry['spdxentry'])
+			if 'children' in centry:
+				report_children(child, centry['spdxname'], centry['matchtypes'], centry['children'])
+
 
 
 if args.version:
@@ -706,8 +710,14 @@ def process_project(hcomps, bom):
 
 						subprojchildren, subprojmatchtypes = process_project(
 							res.json()['items'], sub_bom_components['items'])
-						compsdict[bom_component['componentVersion']]['children'] = subprojchildren
-						compsdict[bom_component['componentVersion']]['matchtypes'] = subprojmatchtypes
+						if bom_component['componentVersion'] in compsdict.keys() and \
+							'children' in compsdict[bom_component['componentVersion']]:
+							compsdict[bom_component['componentVersion']]['children'].extend(subprojchildren)
+							compsdict[bom_component['componentVersion']]['matchtypes'].extend(subprojmatchtypes)
+						else:
+							compsdict[bom_component['componentVersion']]['children'] = subprojchildren
+							compsdict[bom_component['componentVersion']]['matchtypes'] = subprojmatchtypes
+
 
 	return children, childmatchtypes
 
@@ -715,13 +725,12 @@ def process_project(hcomps, bom):
 def add_relationship(parent, child, reln):
 	global spdx
 
-	spdx['relationships'].append(
-		{
+	mydict = {
 			"spdxElementId": quote(parent),
-			"relatedSpdxElement": quote(child),
-			"relationshipType": quote(reln)
+			"relationshipType": quote(reln),
+			"relatedSpdxElement": quote(child)
 		}
-	)
+	spdx['relationships'].append(mydict)
 
 
 topchildren, matchtypes = process_project(hierarchy.json()['items'], bom_components['items'])
@@ -745,7 +754,7 @@ spdx["name"] = quote(project['name'] + '/' + version['versionName'])
 spdx["dataLicense"] = "CC0-1.0"
 # spdx["DocumentNamespace"] = '"' + version['_meta']['href'] + '"'
 spdx["documentDescribes"] = [toppackage]
-add_relationship("Relationship: SPDXRef-DOCUMENT", toppackage, "DESCRIBES")
+add_relationship("SPDXRef-DOCUMENT", toppackage, "DESCRIBES")
 
 spdx_custom_lics = []
 
@@ -778,25 +787,30 @@ spdx['packages'].append(projpkg)
 
 #
 # Walk the compsdict tree to report SPDX entities
+processed_list = []
 index = 0
 for compver in compsdict['TOPLEVEL']['children']:
 	matchtypes = compsdict['TOPLEVEL']['matchtypes'][index]
-	rel = False
-	for checktype in matchtype_depends_dict.keys():
-		if checktype in matchtypes:
-			add_relationship(toppackage, compsdict[compver]['spdxname'], matchtype_depends_dict[checktype])
-			rel = True
-			break
-	if not rel:
-		for checktype in matchtype_contains_dict.keys():
-			if checktype in matchtypes:
-				add_relationship(toppackage, compsdict[compver]['spdxname'], matchtype_contains_dict[checktype])
-				break
 
-	compentry = compsdict[compver]
-	spdx['packages'].append(compentry['spdxentry'])
-	if 'children' in compentry and len(compentry['children']) > 0:
-		report_children(compver, compentry['spdxname'], compentry['matchtypes'], compentry['children'])
+	rel = False
+	if compver not in processed_list:
+		for checktype in matchtype_depends_dict.keys():
+			if checktype in matchtypes:
+				add_relationship(toppackage, compsdict[compver]['spdxname'], matchtype_depends_dict[checktype])
+				rel = True
+				break
+		if not rel:
+			for checktype in matchtype_contains_dict.keys():
+				if checktype in matchtypes:
+					add_relationship(toppackage, compsdict[compver]['spdxname'], matchtype_contains_dict[checktype])
+					break
+
+		processed_list.append(compver)
+
+		compentry = compsdict[compver]
+		spdx['packages'].append(compentry['spdxentry'])
+		if 'children' in compentry and len(compentry['children']) > 0:
+			report_children(compver, compentry['spdxname'], compentry['matchtypes'], compentry['children'])
 
 	index += 1
 #

@@ -19,9 +19,6 @@ from blackduck.HubRestApi import HubInstance
 
 hub = HubInstance()
 serverurl = "https://poc39.blackduck.synopsys.com"
-
-projname = ""
-vername = ""
 spdx_proc = None
 
 
@@ -227,10 +224,8 @@ col_data_comps = [
 ]
 
 
-def create_compstab(compdata):
+def create_compstab(compdata, projname, vername):
     global col_data_comps
-    global projname
-    global vername
 
     return dbc.Row(
         dbc.Col(
@@ -298,19 +293,21 @@ def create_compstab(compdata):
 
 
 col_data_snippets = [
+    {"name": ['Index'], "id": "index"},
     {"name": ['File'], "id": "file"},
     {"name": ['Size (bytes)'], "id": "size"},
     {"name": ['Block'], "id": "block"},
     {"name": ['Match %'], "id": "coveragepct"},
     {"name": ['Matched Lines'], "id": "matchlines"},
     {"name": ['Status'], "id": "status"},
+    {"name": ['Scanid'], "id": "scanid"},
+    {"name": ['Nodeid'], "id": "nodeid"},
+    {"name": ['Snipid'], "id": "snippetid"},
 ]
 
 
-def create_snippetstab(snippetcsv):
+def create_snippetstab(snippetcsv, projname, vername):
     global col_data_snippets
-    global projname
-    global vername
 
     if snippetcsv == '':
         df_snippets = pd.DataFrame(columns=["file", "size", "block", "coveragepct", "matchlines", "status"])
@@ -321,60 +318,81 @@ def create_snippetstab(snippetcsv):
     return dbc.Row(
         dbc.Col(
             [
-                html.H2("Unconfirmed Snippets"),
-                html.H4("Project: " + projname + " Version: " + vername),
-                dash_table.DataTable(
-                    id='sniptable',
-                    columns=col_data_snippets,
-                    style_cell={
-                        'overflow': 'hidden',
-                        'textOverflow': 'ellipsis',
-                        'maxWidth': 0
-                    },
-                    data=df_snippets.to_dict('records'),
-                    page_size=30, sort_action='native',
-                    filter_action='native',
-                    # row_selectable="single",
-                    cell_selectable=False,
-                    style_header={'backgroundColor': 'rgb(30, 30, 30)', 'color': 'white'},
-                    tooltip_data=[
-                        {
-                            column: {'value': str(value), 'type': 'markdown'}
-                            for column, value in row.items()
-                        } for row in df_snippets.to_dict('records')
-                    ],
-                    tooltip_duration=None,
-                    style_data_conditional=[
-                        {
-                            'if': {'column_id': 'file'},
-                            'width': '70%'
-                        },
-                        {
-                            'if': {'column_id': 'size'},
-                            'width': '5%'
-                        },
-                        {
-                            'if': {'column_id': 'block'},
-                            'width': '5%'
-                        },
-                        {
-                            'if': {'column_id': 'coveragepct'},
-                            'width': '5%'
-                        },
-                        {
-                            'if': {'column_id': 'matchlines'},
-                            'width': '5%'
-                        },
-                        {
-                            'if': {'column_id': 'status'},
-                            'width': '10%'
-                        },
-                    ],
-                    sort_by=[{'column_id': 'file', 'direction': 'asc'}]
-                    # merge_duplicate_headers=True
-                )
+                dbc.Row(
+                        dbc.Col(html.H2("Unconfirmed Snippets"), width=12),
+                ),
+                dbc.Row(
+                    [
+                        dbc.Col(html.H4("Project: " + projname + " Version: " + vername), width=4),
+                        dbc.Col(dbc.Button("Ignore Selected", id="button_snip_ignore_selected",
+                                           className="mr-2", size='sm'), width=2),
+                        dbc.Col(dbc.Button("Ignore ALL Filtered", id="button_snip_ignore_all",
+                                           className="mr-2", size='sm'), width=2),
+                        dbc.Col(dbc.Button("UNignore Selected", id="button_snip_unignore_selected",
+                                           className="mr-2", size='sm'), width=2),
+                        dbc.Col(dbc.Button("UNignore ALL Filtered", id="button_snip_unignore_all",
+                                           className="mr-2", size='sm'), width=2),
+                    ]
+                ),
+                dbc.Row(
+                    dbc.Col(
+                        dash_table.DataTable(
+                            id='sniptable',
+                            columns=col_data_snippets,
+                            style_cell={
+                                'overflow': 'hidden',
+                                'textOverflow': 'ellipsis',
+                                'maxWidth': 0
+                            },
+                            data=df_snippets.to_dict('records'),
+                            page_size=30, sort_action='native',
+                            filter_action='native',
+                            row_selectable="multi",
+                            cell_selectable=False,
+                            hidden_columns=["index", "scanid", "nodeid", "snippetid"],
+                            style_header={'backgroundColor': 'rgb(30, 30, 30)', 'color': 'white'},
+                            tooltip_data=[
+                                {
+                                    column: {'value': str(value), 'type': 'markdown'}
+                                    for column, value in row.items()
+                                } for row in df_snippets.to_dict('records')
+                            ],
+                            tooltip_duration=None,
+                            style_data_conditional=[
+                                {
+                                    'if': {'column_id': 'file'},
+                                    'width': '60%'
+                                },
+                                {
+                                    'if': {'column_id': 'size'},
+                                    'width': '8%'
+                                },
+                                {
+                                    'if': {'column_id': 'block'},
+                                    'width': '8%'
+                                },
+                                {
+                                    'if': {'column_id': 'coveragepct'},
+                                    'width': '8%'
+                                },
+                                {
+                                    'if': {'column_id': 'matchlines'},
+                                    'width': '8%'
+                                },
+                                {
+                                    'if': {'column_id': 'status'},
+                                    'width': '8%'
+                                },
+                            ],
+                            sort_by=[{'column_id': 'file', 'direction': 'asc'}]
+                            # merge_duplicate_headers=True
+                        ),
+                        width=12,
+                    ),
+                ),
             ],
-            width=12)
+            width=12
+        )
     )
 
 
@@ -422,10 +440,9 @@ app.layout = dbc.Container(
     [
         # 		dcc.Store(id='sec_values', storage_type='local'),
         # 		dcc.Store(id='lic_values', storage_type='local'),
-        dcc.Store(id='proj_color', storage_type='session'),
-        dcc.Store(id='proj_size', storage_type='session'),
-        dcc.Store(id='sankey_state', storage_type='session'),
-        # dcc.Store(id='active_tab', storage_type='session'),
+        dcc.Store(id='projname', storage_type='session'),
+        dcc.Store(id='vername', storage_type='session'),
+        dcc.Store(id='projverurl', storage_type='session'),
         dbc.NavbarSimple(
             children=[
                 dbc.NavItem(dbc.NavLink("Documentation", href="https://github.com/matthewb66/bdconsole")),
@@ -473,13 +490,13 @@ app.layout = dbc.Container(
                                 tab_id="tab_projects", id="tab_projects"
                             ),
                             dbc.Tab(  # COMPONENTS TAB
-                                create_compstab(df_comp),
+                                create_compstab(df_comp, '', ''),
                                 label="Components",
                                 tab_id="tab_comps", id="tab_comps",
                                 disabled=True,
                             ),
                             dbc.Tab(  # SNIPPETS TAB
-                                create_snippetstab(''),
+                                create_snippetstab('', '', ''),
                                 label="Snippets",
                                 tab_id="tab_snippets", id="tab_snippets",
                                 disabled=True,
@@ -549,7 +566,11 @@ app.layout = dbc.Container(
 
 
 @app.callback(
-    Output("vertable", "data"),
+    [
+        Output("vertable", "data"),
+        Output('vertable', 'selected_rows'),
+        Output('projname', 'data'),
+    ],
     [
         # Input("projtable", "selected_rows"),
         Input('projtable', 'derived_virtual_selected_rows'),
@@ -558,7 +579,6 @@ app.layout = dbc.Container(
     ]
 )
 def cb_projtable(row, vprojdata):
-    global projname
 
     if row is None:
         raise dash.exceptions.PreventUpdate
@@ -569,7 +589,7 @@ def cb_projtable(row, vprojdata):
     projname = vprojdata[row[0]]['name']
     verdata = get_versions_data(projid)
 
-    return verdata.to_dict(orient='records')
+    return verdata.to_dict(orient='records'), [], projname
 
 
 @app.callback(
@@ -581,22 +601,21 @@ def cb_projtable(row, vprojdata):
         Output("tab_snippets", "disabled"),
         Output("tab_snippets", "children"),
         Output("tab_actions", "disabled"),
-        Output("spdx_file", "value")
+        Output("spdx_file", "value"),
+        Output('vername', 'data'),
+        Output('projverurl', 'data'),
     ],
     [
         # Input("projtable", "selected_rows"),
         Input('vertable', 'derived_virtual_selected_rows'),
         State('vertable', 'derived_virtual_data'),
         # State('vertable', 'data'),
+        State('projname', 'data'),
     ]
 )
-def cb_vertable(row, verdata):
-    global projname
-    global vername
+def cb_vertable(row, verdata, projname):
 
-    if row is None:
-        raise dash.exceptions.PreventUpdate
-    if len(row) < 1:
+    if row is None or len(row) < 1:
         raise dash.exceptions.PreventUpdate
 
     projverurl = str(verdata[row[0]]['_meta.href'])
@@ -618,11 +637,10 @@ def cb_vertable(row, verdata):
     snippetdata = snippets.get_snippets_data(hub, projverurl)
 
     return create_vercard(verdata[row[0]], df_comp_new), \
-        create_compstab(df_comp_new), False, "Components (" + str(len(df_comp_new.index)) + ")", \
-        False, create_snippetstab(snippetdata), \
+        create_compstab(df_comp_new, projname, vername), False, "Components (" + str(len(df_comp_new.index)) + ")", \
+        False, create_snippetstab(snippetdata, projname, vername), \
         False, \
-        "SPDX_" + projname + '-' + vername + ".json"
-
+        "SPDX_" + projname + '-' + vername + ".json", vername, projverurl
 
 @app.callback(
     [
@@ -649,7 +667,7 @@ def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec):
     if n <= 0:
         # subprocess.run(["python3", "export_spdx.py", "-o", spdx_file, projname, vername],
         #                capture_output=True)
-        cmd = ["python3", "export_spdx.py", "-o", "SPDX/" + spdx_file, projname, vername]
+        cmd = ["python3", "addons/export_spdx.py", "-o", "SPDX/" + spdx_file, projname, vername]
         if len(spdx_rec) > 0 and spdx_rec[0] == 1:
             cmd.append('--recursive')
         spdx_proc = subprocess.Popen(cmd, close_fds=True)
@@ -662,6 +680,70 @@ def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec):
             return 'Export Complete', True, 0
         else:
             return 'Processing SPDX', False, n
+
+
+@app.callback(
+    inputs=[
+        Input('button_snip_ignore_selected', 'n_clicks'),
+        Input('button_snip_unignore_selected', 'n_clicks'),
+        Input('button_snip_ignore_all', 'n_clicks'),
+        Input('button_snip_unignore_all', 'n_clicks'),
+    ],
+    output=[Output('sniptable', 'data')],
+    state=[
+        State('sniptable', 'data'),
+        State('sniptable', 'derived_virtual_data'),
+        State('sniptable', 'derived_virtual_selected_rows'),
+        State('projverurl', 'data')
+    ]
+)
+def cb_snipactions(snip_ignore_selected_clicks, snip_unignore_selected_clicks, snip_ignore_all_clicks,
+                   snip_unignore_all_clicks, origdata, vdata, selected_rows, projverurl):
+    global hub
+
+    print("cb_snipactions")
+    ctx = dash.callback_context.triggered[0]
+    ctx_caller = ctx['prop_id']
+    if ctx_caller == 'button_snip_ignore_selected.n_clicks':
+        action = 'ignore'
+        rows = selected_rows
+    elif ctx_caller == 'button_snip_ignore_all.n_clicks':
+        action = 'ignore'
+        rows = vdata
+    elif ctx_caller == 'button_snip_unignore_selected.n_clicks':
+        action = 'unignore'
+        rows = selected_rows
+    elif ctx_caller == 'button_snip_unignore_all.n_clicks':
+        action = 'unignore'
+        rows = vdata
+    else:
+        raise dash.exceptions.PreventUpdate
+    for row in rows:
+        index = 0
+        for origrow in origdata:
+            if origrow['snippetid'] == vdata[row]['snippetid']:
+                break
+            index += 1
+
+        if action == 'ignore' and vdata[row]['status'] == 'Not ignored':
+            # Ignore it
+            origdata[row]['status'] = 'Ignored'
+            if snippets.ignore_snippet_bom_entry(hub, projverurl, vdata[row]['scanid'], vdata[row]['nodeid'],
+                                              vdata[row]['snippetid'], True):
+                print("{} Ignored".format(vdata[row]['file']))
+            else:
+                print("Error")
+
+        elif action == 'unignore' and vdata[row]['status'] == 'Ignored':
+            # Unignore it
+            origdata[row]['status'] = 'Not ignored'
+            if snippets.ignore_snippet_bom_entry(hub, projverurl, vdata[row]['scanid'], vdata[row]['nodeid'],
+                                              vdata[row]['snippetid'], False):
+                print("{} UNignored".format(vdata[row]['file']))
+            else:
+                print("Error")
+
+    return origdata
 
 
 if __name__ == '__main__':
