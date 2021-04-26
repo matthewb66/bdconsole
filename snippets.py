@@ -34,11 +34,10 @@ def ignore_snippet_bom_entry(hub, url, scanid, nodeid, snippetid, ignore):
 
 def get_snippets_data(hub, path):
 
-    csv_data = "{},{},{},{},{},{},{},{},{},{}\n".format("index", "file", "size", "block", "coveragepct", "matchlines",
+    csv_data = "{},{},{},{},{},{},{},{},{}\n".format("file", "size", "block", "coveragepct", "matchlines",
                                                         "status", "scanid", "nodeid", "snippetid")
     alreadyignored = 0
     snippet_bom_entries = get_snippet_entries(hub, path)
-    index = 0
     if snippet_bom_entries != '':
         # print(snippet_bom_entries)
         for snippet_item in snippet_bom_entries['items']:
@@ -56,8 +55,8 @@ def get_snippets_data(hub, path):
                 snippetid = match['hashId']
                 matchedlines = match['sourceEndLines'][0] - match['sourceStartLines'][0]
                 filename = os.path.join(match['matchFilePath'], snippet_item['name'])
-                csv_data += "{},{},{},{},{},{},{},{},{},{}\n".\
-                    format(index, filename.replace(',', ' '), snippet_item['size'], blocknum, match['matchCoverage'],
+                csv_data += "{},{},{},{},{},{},{},{},{}\n".\
+                    format(filename.replace(',', ' '), snippet_item['size'], blocknum, match['matchCoverage'],
                            matchedlines, igstatus, scanid, nodeid, snippetid)
                 blocknum += 1
 
