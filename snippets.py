@@ -62,4 +62,5 @@ def get_snippets_data(hub, path):
                 blocknum += 1
                 count += 1
 
+    print('Found ' + str(count) + ' snippets')
     return csv_data, count

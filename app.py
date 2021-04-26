@@ -14,6 +14,7 @@ import subprocess
 import io
 
 import snippets
+import trend
 
 from blackduck.HubRestApi import HubInstance
 
@@ -24,7 +25,10 @@ spdx_proc = None
 
 def get_project_data():
     projs = hub.get_projects(5000)
-    return pd.json_normalize(projs, record_path=['items'])
+    df = pd.json_normalize(projs, record_path=['items'])
+
+    print('Found ' + str(len(df.index)) + ' projects')
+    return df
 
 
 def get_versions_data(proj):
@@ -35,6 +39,7 @@ def get_versions_data(proj):
     vers = res.json()
     df = pd.json_normalize(vers, record_path=['items'])
 
+    print('Found ' + str(len(df.index)) + ' versions')
     return df
 
 
@@ -46,6 +51,14 @@ def get_vulns_data(projverurl):
     vulns = res.json()
     df = pd.json_normalize(vulns, record_path=['items'])
 
+    df['vulnerabilityWithRemediation.vulnerabilityPublishedDate'] = \
+        pd.DatetimeIndex(df['vulnerabilityWithRemediation.vulnerabilityPublishedDate']).strftime("%Y-%m-%d")
+    df['vulnerabilityWithRemediation.vulnerabilityUpdatedDate'] = \
+        pd.DatetimeIndex(df['vulnerabilityWithRemediation.vulnerabilityUpdatedDate']).strftime("%Y-%m-%d")
+    df['vulnerabilityWithRemediation.remediationUpdatedAt'] = \
+        pd.DatetimeIndex(df['vulnerabilityWithRemediation.remediationUpdatedAt']).strftime("%Y-%m-%d")
+
+    print('Found ' + str(len(df.index)) + ' vulnerabilities')
     return df
 
 
@@ -236,7 +249,7 @@ def create_compstab(compdata, projname, vername):
         ),
         dbc.Row(
             [
-                dbc.Col(html.H5("Project: " + projname + " Version: " + vername), width=7),
+                dbc.Col(html.H5("Project: " + projname + " Version: " + vername), width=5),
                 dbc.Col(
                     dcc.Dropdown(
                         id="sel_comp_action",
@@ -261,9 +274,9 @@ def create_compstab(compdata, projname, vername):
                     align='center',
                 ),
                 dbc.Col(dbc.Button("Process Selected", id="button_comp_selected",
-                                   className="mr-2", size='sm'), width=1),
+                                   className="mr-2", size='sm'), width=2),
                 dbc.Col(dbc.Button("Process ALL in Table", id="button_comp_all",
-                                   className="mr-2", size='sm'), width=1),
+                                   className="mr-2", size='sm'), width=2),
             ]
         ),
         dbc.Row(
@@ -318,6 +331,22 @@ def create_compstab(compdata, projname, vername):
                             'if': {'column_id': 'matchTypes'},
                             'width': '10%'
                         },
+                        {
+                            'if': {
+                                'filter_query': '{policyStatus} = "IN_VIOLATION"',
+                                'column_id': 'policyStatus'
+                            },
+                            'backgroundColor': 'maroon',
+                            'color': 'white'
+                        },
+                        {
+                            'if': {
+                                'filter_query': '{reviewStatus} = "REVIEWED"',
+                                'column_id': 'reviewStatus'
+                            },
+                            'backgroundColor': 'blue',
+                            'color': 'white'
+                        },
                     ],
                     sort_by=[{'column_id': 'componentName', 'direction': 'asc'},
                              {'column_id': 'componentVersionName', 'direction': 'asc'}]
@@ -336,12 +365,13 @@ col_data_vulns = [
     {"name": ['Related Vuln'], "id": "vulnerabilityWithRemediation.relatedVulnerability"},
     {"name": ['Description'], "id": "vulnerabilityWithRemediation.description"},
     {"name": ['Published Date'], "id": "vulnerabilityWithRemediation.vulnerabilityPublishedDate"},
-    {"name": ['Updated Date'], "id": "vulnerabilityWithRemediation.vvulnerabilityUpdatedDate"},
+    {"name": ['Updated Date'], "id": "vulnerabilityWithRemediation.vulnerabilityUpdatedDate"},
     {"name": ['Overall Score'], "id": "vulnerabilityWithRemediation.overallScore"},
     {"name": ['Exploit Score'], "id": "vulnerabilityWithRemediation.exploitabilitySubscore"},
     {"name": ['Impact Score'], "id": "vulnerabilityWithRemediation.impactSubscore"},
     {"name": ['Severity'], "id": "vulnerabilityWithRemediation.severity"},
-    {"name": ['Remediation Status'], "id": "vulnerabilityWithRemediation.remediationStatus"},
+    {"name": ['Rem Status'], "id": "vulnerabilityWithRemediation.remediationStatus"},
+    {"name": ['Rem Date'], "id": "vulnerabilityWithRemediation.remediationUpdatedAt"},
     {"name": ['CWE'], "id": "vulnerabilityWithRemediation.cweId"},
 ]
 
@@ -367,6 +397,7 @@ col_data_vulns = [
 #        '_meta.href', '_meta.links',
 #        'vulnerabilityWithRemediation.relatedVulnerability'
 
+
 def create_vulnstab(vulndata, projname, vername):
     global col_data_vulns
 
@@ -376,7 +407,7 @@ def create_vulnstab(vulndata, projname, vername):
         ),
         dbc.Row(
             [
-                dbc.Col(html.H5("Project: " + projname + " Version: " + vername), width=7),
+                dbc.Col(html.H5("Project: " + projname + " Version: " + vername), width=5),
                 dbc.Col(
                     dcc.Dropdown(
                         id="sel_vuln_action",
@@ -399,9 +430,9 @@ def create_vulnstab(vulndata, projname, vername):
                     align='center',
                 ),
                 dbc.Col(dbc.Button("Process Selected", id="button_vuln_selected",
-                                   className="mr-2", size='sm'), width=1),
+                                   className="mr-2", size='sm'), width=2),
                 dbc.Col(dbc.Button("Process ALL in Table", id="button_vuln_all",
-                                   className="mr-2", size='sm'), width=1),
+                                   className="mr-2", size='sm'), width=2),
             ]
         ),
         dbc.Row(
@@ -434,11 +465,11 @@ def create_vulnstab(vulndata, projname, vername):
                         },
                         {
                             'if': {'column_id': 'componentVersionName'},
-                            'width': '10%'
+                            'width': '5%'
                         },
                         {
                             'if': {'column_id': 'vulnerabilityWithRemediation.vulnerabilityName'},
-                            'width': '5%'
+                            'width': '10%'
                         },
                         {
                             'if': {'column_id': 'vulnerabilityWithRemediation.relatedVulnerability'},
@@ -446,19 +477,78 @@ def create_vulnstab(vulndata, projname, vername):
                         },
                         {
                             'if': {'column_id': 'vulnerabilityWithRemediation.description'},
-                            'width': '20%'
+                            'width': '15%'
                         },
                         {
                             'if': {'column_id': 'vulnerabilityWithRemediation.vulnerabilityPublishedDate'},
+                            'width': '8%'
+                        },
+                        {
+                            'if': {'column_id': 'vulnerabilityWithRemediation.vulnerabilityUpdatedDate'},
+                            'width': '8%'
+                        },
+                        {
+                            'if': {'column_id': 'vulnerabilityWithRemediation.overallScore'},
                             'width': '5%'
                         },
                         {
-                            'if': {'column_id': 'vulnerabilityWithRemediation.vvulnerabilityUpdatedDate'},
-                            'width': '10%'
+                            'if': {'column_id': 'vulnerabilityWithRemediation.exploitabilitySubscore'},
+                            'width': '5%'
+                        },
+                        {
+                            'if': {'column_id': 'vulnerabilityWithRemediation.impactSubscore'},
+                            'width': '5%'
+                        },
+                        {
+                            'if': {'column_id': 'vulnerabilityWithRemediation.severity'},
+                            'width': '5%'
+                        },
+                        {
+                            'if': {'column_id': 'vulnerabilityWithRemediation.remediationStatus'},
+                            'width': '5%'
+                        },
+                        {
+                            'if': {'column_id': 'vulnerabilityWithRemediation.remediationUpdatedAt'},
+                            'width': '5%'
+                        },
+                        {
+                            'if': {'column_id': 'vulnerabilityWithRemediation.cweId'},
+                            'width': '5%'
+                        },
+                        {
+                            'if': {
+                                'filter_query': '{vulnerabilityWithRemediation.severity} = "CRITICAL"',
+                                'column_id': 'vulnerabilityWithRemediation.severity'
+                            },
+                            'backgroundColor': 'maroon',
+                            'color': 'white'
+                        },
+                        {
+                            'if': {
+                                'filter_query': '{vulnerabilityWithRemediation.severity} = "HIGH"',
+                                'column_id': 'vulnerabilityWithRemediation.severity'
+                            },
+                            'backgroundColor': 'crimson',
+                            'color': 'black'
+                        },
+                        {
+                            'if': {
+                                'filter_query': '{vulnerabilityWithRemediation.severity} = "MEDIUM"',
+                                'column_id': 'vulnerabilityWithRemediation.severity'
+                            },
+                            'backgroundColor': 'coral',
+                            'color': 'black'
+                        },
+                        {
+                            'if': {
+                                'filter_query': '{vulnerabilityWithRemediation.severity} = "LOW"',
+                                'column_id': 'vulnerabilityWithRemediation.severity'
+                            },
+                            'backgroundColor': 'gold',
+                            'color': 'black'
                         },
                     ],
-                    sort_by=[{'column_id': 'componentName', 'direction': 'asc'},
-                             {'column_id': 'componentVersionName', 'direction': 'asc'}]
+                    sort_by=[{'column_id': 'vulnerabilityWithRemediation.overallScore', 'direction': 'desc'}],
                     # merge_duplicate_headers=True
                 ),
                 width=12
@@ -497,7 +587,7 @@ def create_snippetstab(snippetcsv, projname, vername):
                 ),
                 dbc.Row(
                     [
-                        dbc.Col(html.H4("Project: " + projname + " Version: " + vername), width=7),
+                        dbc.Col(html.H4("Project: " + projname + " Version: " + vername), width=5),
                         dbc.Col(
                             dcc.Dropdown(
                                 id="sel_snip_action",
@@ -514,9 +604,9 @@ def create_snippetstab(snippetcsv, projname, vername):
                             align='center',
                         ),
                         dbc.Col(dbc.Button("Process Selected", id="button_snip_selected",
-                                           className="mr-2", size='sm'), width=1),
+                                           className="mr-2", size='sm'), width=2),
                         dbc.Col(dbc.Button("Process ALL in Table", id="button_snip_all",
-                                           className="mr-2", size='sm'), width=1),
+                                           className="mr-2", size='sm'), width=2),
                     ]
                 ),
                 dbc.Row(
@@ -703,14 +793,21 @@ app.layout = dbc.Container(
                                 disabled=True,
                             ),
                             dbc.Tab(  # TREND TAB
-                                dbc.Row(
-                                    dbc.Col(
-                                        [
-                                            html.Div(children=[''], id='compgraph'),
-                                            html.Div(children=[''], id='vulngraph'),
-                                        ], width=12
-                                    )
-                                ),
+                                [
+                                    dbc.Row(
+                                        dbc.Col(
+                                            dbc.Button("Create Trend", id="button_trend",
+                                                       className="mr-2", size='sm'), width=2),
+                                    ),
+                                    dbc.Row(
+                                        dbc.Col(
+                                            [
+                                                html.Div(children=[''], id='compgraph'),
+                                                html.Div(children=[''], id='vulngraph'),
+                                            ], width=12
+                                        )
+                                    ),
+                                ],
                                 label="Project Version Trend",
                                 tab_id="tab_trend", id="tab_trend",
                                 disabled=True,
@@ -899,12 +996,13 @@ def cb_vertable(row, verdata, projname):
 
     compdata = resp.json()
     df_comp_new = pd.json_normalize(compdata, record_path=['items'])
+    print('Found ' + str(len(df_comp_new.index)) + ' Components')
 
-    if len(df_comp_new.index) > 0:
-        df_comp_new.loc[(df_comp_new.policyStatus == 'IN_VIOLATION'), 'policyStatus'] = '🚫️'
-        df_comp_new.loc[(df_comp_new.policyStatus == 'NOT_IN_VIOLATION'), 'policyStatus'] = 'None'
-        df_comp_new.loc[(df_comp_new.ignored == True), 'ignored'] = '❗'
-        df_comp_new.loc[(df_comp_new.ignored != True), 'ignored'] = 'Not Ignored'
+    # if len(df_comp_new.index) > 0:
+    #     df_comp_new.loc[(df_comp_new.policyStatus == 'IN_VIOLATION'), 'policyStatus'] = '🚫️'
+    #     df_comp_new.loc[(df_comp_new.policyStatus == 'NOT_IN_VIOLATION'), 'policyStatus'] = 'None'
+    #     df_comp_new.loc[(df_comp_new.ignored == True), 'ignored'] = '❗'
+    #     df_comp_new.loc[(df_comp_new.ignored != True), 'ignored'] = 'Not Ignored'
 
     df_vuln_new = get_vulns_data(projverurl)
 
@@ -1096,7 +1194,7 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
         # Find component in allcomps list
         compdata = None
         for comp in allcomps:
-            if compurl == comp['componentVersion']:
+            if 'componentVersion' in comp and compurl == comp['componentVersion']:
                 compdata = comp
                 break
 
@@ -1159,6 +1257,33 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
         toast = make_comp_toast("{} Components {}".format(count, confirmation))
 
     return vdata, toast
+
+
+@app.callback(
+    [
+        Output('compgraph', 'children'),
+        Output('vulngraph', 'children'),
+    ],
+    [
+        Input('button_trend', 'n_clicks'),
+        State('projverurl', 'data'),
+    ]
+)
+def cb_trend(button, purl):
+
+    if button is None:
+        raise dash.exceptions.PreventUpdate
+
+    print("\n\nProcessing project version '{}'".format(purl))
+
+    compdata, vulndata = trend.proc_journals(hub, purl)
+    if compdata is None:
+        return [], []
+
+    compfig = trend.create_fig_compstimeline(compdata)
+    vulnfig = trend.create_fig_vulnstimeline(vulndata)
+
+    return dcc.Graph(figure=compfig, id='fig_time_trend'), dcc.Graph(figure=vulnfig, id='fig_time_trend')
 
 
 if __name__ == '__main__':
