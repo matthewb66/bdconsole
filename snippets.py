@@ -37,6 +37,7 @@ def get_snippets_data(hub, path):
     csv_data = "{},{},{},{},{},{},{},{},{}\n".format("file", "size", "block", "coveragepct", "matchlines",
                                                         "status", "scanid", "nodeid", "snippetid")
     alreadyignored = 0
+    count = 0
     snippet_bom_entries = get_snippet_entries(hub, path)
     if snippet_bom_entries != '':
         # print(snippet_bom_entries)
@@ -59,5 +60,6 @@ def get_snippets_data(hub, path):
                     format(filename.replace(',', ' '), snippet_item['size'], blocknum, match['matchCoverage'],
                            matchedlines, igstatus, scanid, nodeid, snippetid)
                 blocknum += 1
+                count += 1
 
-    return csv_data
+    return csv_data, count
