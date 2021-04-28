@@ -44,19 +44,22 @@ def get_versions_data(proj):
 
 
 def get_vulns_data(projverurl):
-    res = hub.execute_get(projverurl + '/vulnerable-bom-components?limit=5000')
+    print('Getting Vulnerabilities ...')
+    custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
+    res = hub.execute_get(projverurl + '/vulnerable-bom-components?limit=5000', custom_headers=custom_headers)
     if res.status_code != 200:
         print('Get vulnerabilities - return code ' + res.status_code)
         return None
     vulns = res.json()
     df = pd.json_normalize(vulns, record_path=['items'])
 
-    df['vulnerabilityWithRemediation.vulnerabilityPublishedDate'] = \
-        pd.DatetimeIndex(df['vulnerabilityWithRemediation.vulnerabilityPublishedDate']).strftime("%Y-%m-%d")
-    df['vulnerabilityWithRemediation.vulnerabilityUpdatedDate'] = \
-        pd.DatetimeIndex(df['vulnerabilityWithRemediation.vulnerabilityUpdatedDate']).strftime("%Y-%m-%d")
-    df['vulnerabilityWithRemediation.remediationUpdatedAt'] = \
-        pd.DatetimeIndex(df['vulnerabilityWithRemediation.remediationUpdatedAt']).strftime("%Y-%m-%d")
+    if len(df.index) > 0:
+        df['vulnerabilityWithRemediation.vulnerabilityPublishedDate'] = \
+            pd.DatetimeIndex(df['vulnerabilityWithRemediation.vulnerabilityPublishedDate']).strftime("%Y-%m-%d")
+        df['vulnerabilityWithRemediation.vulnerabilityUpdatedDate'] = \
+            pd.DatetimeIndex(df['vulnerabilityWithRemediation.vulnerabilityUpdatedDate']).strftime("%Y-%m-%d")
+        df['vulnerabilityWithRemediation.remediationUpdatedAt'] = \
+            pd.DatetimeIndex(df['vulnerabilityWithRemediation.remediationUpdatedAt']).strftime("%Y-%m-%d")
 
     print('Found ' + str(len(df.index)) + ' vulnerabilities')
     return df
@@ -125,6 +128,10 @@ col_data_proj = [
     {"name": ['Lic Conflicts'], "id": "licenseConflictsEnabled"},
 ]
 
+for col, dtype in df_proj.dtypes.items():
+    if dtype == 'bool':
+        df_proj[col] = df_proj[col].astype('str')
+
 projtable = dash_table.DataTable(
     id='projtable',
     columns=col_data_proj,
@@ -150,6 +157,22 @@ projtable = dash_table.DataTable(
         {
             'if': {'column_id': 'name'},
             'width': '20%'
+        },
+        {
+            'if': {
+                'filter_query': '{customSignatureEnabled} eq "True"',
+                'column_id': 'customSignatureEnabled'
+            },
+            'backgroundColor': 'black',
+            'color': 'white'
+        },
+        {
+            'if': {
+                'filter_query': '{licenseConflictsEnabled} eq "True"',
+                'column_id': 'licenseConflictsEnabled'
+            },
+            'backgroundColor': 'grey',
+            'color': 'white'
         },
     ],
     sort_by=[{'column_id': 'name', 'direction': 'asc'}],
@@ -242,6 +265,10 @@ col_data_comps = [
 
 def create_compstab(compdata, projname, vername):
     global col_data_comps
+
+    for col, dtype in compdata.dtypes.items():
+        if dtype == 'bool':
+            compdata[col] = compdata[col].astype('str')
 
     return [
         dbc.Row(
@@ -345,6 +372,14 @@ def create_compstab(compdata, projname, vername):
                                 'column_id': 'reviewStatus'
                             },
                             'backgroundColor': 'blue',
+                            'color': 'white'
+                        },
+                        {
+                            'if': {
+                                'filter_query': '{ignored} eq "True"',
+                                'column_id': 'ignored'
+                            },
+                            'backgroundColor': 'grey',
                             'color': 'white'
                         },
                     ],
@@ -547,6 +582,47 @@ def create_vulnstab(vulndata, projname, vername):
                             'backgroundColor': 'gold',
                             'color': 'black'
                         },
+                        {
+                            'if': {
+                                'filter_query': '{vulnerabilityWithRemediation.remediationStatus} = "IGNORED"',
+                                'column_id': 'vulnerabilityWithRemediation.remediationStatus'
+                            },
+                            'backgroundColor': 'grey',
+                            'color': 'white'
+                        },
+                        {
+                            'if': {
+                                'filter_query': '{vulnerabilityWithRemediation.remediationStatus} = "PATCHED"',
+                                'column_id': 'vulnerabilityWithRemediation.remediationStatus'
+                            },
+                            'backgroundColor': 'grey',
+                            'color': 'white'
+                        },
+                        {
+                            'if': {
+                                'filter_query': '{vulnerabilityWithRemediation.remediationStatus} = "MITIGATED"',
+                                'column_id': 'vulnerabilityWithRemediation.remediationStatus'
+                            },
+                            'backgroundColor': 'grey',
+                            'color': 'white'
+                        },
+                        {
+                            'if': {
+                                'filter_query': '{vulnerabilityWithRemediation.remediationStatus} = "DUPLICATE"',
+                                'column_id': 'vulnerabilityWithRemediation.remediationStatus'
+                            },
+                            'backgroundColor': 'grey',
+                            'color': 'white'
+                        },
+                        {
+                            'if': {
+                                'filter_query':
+                                    '{vulnerabilityWithRemediation.remediationStatus} = "REMEDIATION_COMPLETE"',
+                                'column_id': 'vulnerabilityWithRemediation.remediationStatus'
+                            },
+                            'backgroundColor': 'grey',
+                            'color': 'white'
+                        },
                     ],
                     sort_by=[{'column_id': 'vulnerabilityWithRemediation.overallScore', 'direction': 'desc'}],
                     # merge_duplicate_headers=True
@@ -659,6 +735,15 @@ def create_snippetstab(snippetcsv, projname, vername):
                                     'if': {'column_id': 'status'},
                                     'width': '8%'
                                 },
+                                {
+                                    'if': {
+                                        'filter_query':
+                                            '{status} = "Ignored"',
+                                        'column_id': 'status'
+                                    },
+                                    'backgroundColor': 'grey',
+                                    'color': 'white'
+                                },
                             ],
                             sort_by=[{'column_id': 'file', 'direction': 'asc'}]
                             # merge_duplicate_headers=True
@@ -709,6 +794,33 @@ def create_vercard(ver, comps, vername, projname):
     )
 
 
+def create_trendtab(projname, vername, graph1, graph2):
+    return dbc.Row(
+        dbc.Col(
+            [
+                dbc.Row(
+                    dbc.Col(
+                        [
+                            html.H4('Project :' + projname + ' - Version: ' + vername),
+                            dbc.Button("Create Trend", id="button_trend",
+                                       className="mr-2", size='sm'),
+                        ],
+                        width=12
+                    ),
+                ),
+                dbc.Row(
+                    dbc.Col(
+                        [
+                            html.Div(children=[graph1], id='compgraph'),
+                            html.Div(children=[graph2], id='vulngraph'),
+                        ], width=12
+                    )
+                ),
+            ],
+        ),
+    ),
+
+
 app.layout = dbc.Container(
     [
         # 		dcc.Store(id='sec_values', storage_type='local'),
@@ -736,6 +848,10 @@ app.layout = dbc.Container(
         ),
         html.Div(
             id="toast-container-ver",
+            style={"position": "fixed", "top": 10, "right": 10, "width": 350},
+        ),
+        html.Div(
+            id="toast-container-vuln",
             style={"position": "fixed", "top": 10, "right": 10, "width": 350},
         ),
         dbc.Row(
@@ -793,21 +909,33 @@ app.layout = dbc.Container(
                                 disabled=True,
                             ),
                             dbc.Tab(  # TREND TAB
-                                [
-                                    dbc.Row(
-                                        dbc.Col(
-                                            dbc.Button("Create Trend", id="button_trend",
-                                                       className="mr-2", size='sm'), width=2),
+                                dbc.Row(
+                                    dbc.Col(
+                                        [
+                                            dbc.Row(
+                                                [
+                                                    dbc.Col(
+                                                        html.H4('Project : N/A - Version: N/A'),
+                                                        width=10
+                                                    ),
+                                                    dbc.Col(
+                                                        dbc.Button("Create Trend", id="button_trend",
+                                                                   className="mr-2", size='sm'),
+                                                        width=2
+                                                    ),
+                                                ],
+                                            ),
+                                            dbc.Row(
+                                                dbc.Col(
+                                                    [
+                                                        html.Div(children=[''], id='compgraph'),
+                                                        html.Div(children=[''], id='vulngraph'),
+                                                    ], width=12
+                                                )
+                                            ),
+                                        ],
                                     ),
-                                    dbc.Row(
-                                        dbc.Col(
-                                            [
-                                                html.Div(children=[''], id='compgraph'),
-                                                html.Div(children=[''], id='vulngraph'),
-                                            ], width=12
-                                        )
-                                    ),
-                                ],
+                                ),
                                 label="Project Version Trend",
                                 tab_id="tab_trend", id="tab_trend",
                                 disabled=True,
@@ -924,6 +1052,22 @@ def make_comp_toast(message):
     )
 
 
+def make_vuln_toast(message):
+    """
+    Helper function for making a toast. dict id for use in pattern matching
+    callbacks.
+    """
+    return dbc.Toast(
+        message,
+        id={"type": "toast", "id": "toast_vuln"},
+        key='toast_vuln',
+        header="Vulnerability Processing",
+        is_open=True,
+        dismissable=True,
+        icon="info",
+    )
+
+
 @app.callback(
     [
         Output("vertable", "data"),
@@ -964,6 +1108,7 @@ def cb_projtable(row, vprojdata):
         Output("tab_snippets", "disabled"),
         Output("tab_snippets", "label"),
         Output("tab_trend", "disabled"),
+        Output("tab_trend", "children"),
         Output("tab_actions", "disabled"),
         Output("spdx_file", "value"),
         Output('vername', 'data'),
@@ -987,12 +1132,13 @@ def cb_vertable(row, verdata, projname):
     projverurl = str(verdata[row[0]]['_meta.href'])
     path = projverurl + "/components?limit=5000"
     # print(url)
+    print('Getting components ...')
     custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
     resp = hub.execute_get(path, custom_headers=custom_headers)
     if resp.status_code != 200:
         print('component list response ' + resp.status_code)
         toast = make_ver_toast('Unable to get components - check permissions')
-        return '', '', True, "Components", True, '', True, True, '', vername, projverurl, toast
+        return '', '', True, "Components", True, '', True, '', True, '', vername, projverurl, toast
 
     compdata = resp.json()
     df_comp_new = pd.json_normalize(compdata, record_path=['items'])
@@ -1010,10 +1156,12 @@ def cb_vertable(row, verdata, projname):
 
     return create_vercard(verdata[row[0]], df_comp_new, vername, projname), \
         create_compstab(df_comp_new, projname, vername), False, "Components (" + str(len(df_comp_new.index)) + ")", \
-        create_vulnstab(df_vuln_new, projname, vername), False, "Vulnerabilities (" + str(len(df_vuln_new.index)) + ")", \
+        create_vulnstab(df_vuln_new, projname, vername), False, \
+        "Vulnerabilities (" + str(len(df_vuln_new.index)) + ")", \
         create_snippetstab(snippetdata, projname, vername), False, "Snippets (" + str(snipcount) + ")", \
-        False, False, \
-        "SPDX_" + projname + '-' + vername + ".json", vername, projverurl, ''
+        False, create_trendtab(projname, vername, '', ''), \
+        False, "SPDX_" + projname + '-' + vername + ".json", vername, projverurl, \
+        ''
 
 
 @app.callback(
@@ -1134,7 +1282,7 @@ def cb_snipactions(snip_selected_clicks, snip_all_clicks, action,
     if count > 0:
         toast = make_snip_toast("{} Snippets {}".format(count, confirmation))
 
-    return vdata, toast
+    return origdata, toast
 
 
 @app.callback(
@@ -1176,7 +1324,8 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
     allcomps = resp.json()['items']
 
     def comp_action(url, cdata):
-        cdata['ignored'] = True
+        custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json',
+                          'Content-Type': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
         putresp = hub.execute_put(url, cdata, custom_headers=custom_headers)
         if not putresp.ok:
             print('Error - cannot update component ' + url)
@@ -1185,6 +1334,45 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
             print('Processed component ' + cdata['componentName'])
             return True
 
+    compaction_dict = {
+        'IGNORE':
+            {'field': 'ignored', 'value': True,
+             'confirmation': 'Ignored', 'display': True},
+        'UNIGNORE':
+            {'field': 'ignored', 'value': False,
+             'confirmation': 'Ignored', 'display': False},
+        'REVIEW':
+            {'field': 'reviewStatus', 'value': 'REVIEWED',
+             'confirmation': 'Set Reviewed', 'display': 'REVIEWED'},
+        'UNREVIEW':
+            {'field': 'reviewStatus', 'value': 'NOT_REVIEWED',
+             'confirmation': 'Set Unreviewed', 'display': 'NOT_REVIEWED'},
+        'USAGE_SOURCE':
+            {'field': 'usages', 'value': ['SOURCE_CODE'],
+             'confirmation': 'Usage Changed', 'display': 'SOURCE_CODE'},
+        'USAGE_STATIC':
+            {'field': 'usages', 'value': ['STATICALLY_LINKED'],
+             'confirmation': 'Usage Changed', 'display': 'STATICALLY_LINKED'},
+        'USAGE_DYNAMIC':
+            {'field': 'usages', 'value': ['DYNAMICALLY_LINKED'],
+             'confirmation': 'Usage Changed', 'display': 'DYNAMICALLY_LINKED'},
+        'USAGE_SEPARATE':
+            {'field': 'usages', 'value': ['SEPARATE_WORK'],
+             'confirmation': 'Usage Changed', 'display': 'SEPARATE_WORK'},
+        'USAGE_AGGREGATED':
+            {'field': 'usages', 'value': ['MERELY_AGGREGATED'],
+             'confirmation': 'Usage Changed', 'display': 'MERELY_AGGREGATED'},
+        'USAGE_STANDARD':
+            {'field': 'usages', 'value': ['IMPLEMENTATION_OF_STANDARD'],
+             'confirmation': 'Usage Changed', 'display': 'IMPLEMENTATION_OF_STANDARD'},
+        'USAGE_PREREQUISITE':
+            {'field': 'usages', 'value': ['PREREQUISITE'],
+             'confirmation': 'Usage Changed', 'display': 'PREREQUISITE'},
+        'USAGE_EXCLUDED':
+            {'field': 'usages', 'value': ['DEV_TOOL_EXCLUDED'],
+             'confirmation': 'Usage Changed', 'display': 'DEV_TOOL_EXCLUDED'},
+    }
+    
     count = 0
     confirmation = ''
     for row in rows:
@@ -1192,71 +1380,135 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
         compurl = thiscomp['componentVersion']
         #
         # Find component in allcomps list
-        compdata = None
-        for comp in allcomps:
-            if 'componentVersion' in comp and compurl == comp['componentVersion']:
-                compdata = comp
-                break
+        compdata = next(comp for comp in allcomps if comp["componentVersion"] == compurl)
 
         if compdata is not None:
-            if action == 'IGNORE' and not compdata['ignored']:
-                vdata[row]['ignored'] = 'Ignored'
-                confirmation = 'Ignored'
-                compdata['ignored'] = True
-            elif action == 'UNIGNORE' and compdata['ignored']:
-                vdata[row]['ignored'] = 'Not Ignored'
-                confirmation = 'Unignored'
-                compdata['ignored'] = False
-            elif action == 'REVIEW' and compdata['reviewStatus'] == 'NOT_REVIEWED':
-                vdata[row]['reviewStatus'] = 'REVIEWED'
-                confirmation = 'Set Reviewed'
-                compdata['reviewStatus'] = 'REVIEWED'
-            elif action == 'UNREVIEW' and compdata['reviewStatus'] == 'REVIEWED':
-                vdata[row]['reviewStatus'] = 'NOT_REVIEWED'
-                confirmation = 'Set Unreviewed'
-                compdata['reviewStatus'] = 'NOT_REVIEWED'
-            elif action == 'USAGE_SOURCE':
-                vdata[row]['usages'] = 'SOURCE_CODE'
-                confirmation = 'Usage changed'
-                compdata['usages'] = ['SOURCE_CODE']
-            elif action == 'USAGE_STATIC':
-                vdata[row]['usages'] = 'STATICALLY_LINKED'
-                confirmation = 'Usage changed'
-                compdata['usages'] = 'STATICALLY_LINKED'
-            elif action == 'USAGE_DYNAMIC':
-                vdata[row]['usages'] = 'DYNAMICALLY_LINKED'
-                confirmation = 'Usage changed'
-                compdata['usages'] = 'DYNAMICALLY_LINKED'
-            elif action == 'USAGE_SEPARATE':
-                vdata[row]['usages'] = 'SEPARATE_WORK'
-                confirmation = 'Usage changed'
-                compdata['usages'] = 'SEPARATE_WORK'
-            elif action == 'USAGE_AGGREGATED':
-                vdata[row]['usages'] = 'MERELY_AGGREGATED'
-                confirmation = 'Usage changed'
-                compdata['usages'] = 'MERELY_AGGREGATED'
-            elif action == 'USAGE_STANDARD':
-                vdata[row]['usages'] = 'IMPLEMENTATION_OF_STANDARD'
-                confirmation = 'Usage changed'
-                compdata['usages'] = 'IMPLEMENTATION_OF_STANDARD'
-            elif action == 'USAGE_PREREQUISITE':
-                vdata[row]['usages'] = 'PREREQUISITE'
-                confirmation = 'Usage changed'
-                compdata['usages'] = 'PREREQUISITE'
-            elif action == 'USAGE_EXCLUDED':
-                vdata[row]['usages'] = 'DEV_TOOL_EXCLUDED'
-                confirmation = 'Usage changed'
-                compdata['usages'] = 'DEV_TOOL_EXCLUDED'
+            if action in compaction_dict.keys():
+                entry = compaction_dict[action]
+                foundrow = -1
+                for origrow, origcomp in enumerate(origdata):
+                    if origcomp['componentVersion'] == vdata[row]['componentVersion']:
+                        foundrow = origrow
+                        break
+                if foundrow >= 0:
+                    origdata[foundrow][entry['field']] = entry['display']
+                    confirmation = entry['confirmation']
+                    compdata[entry['field']] = entry['value']
 
-            thiscompurl = projverurl + '/' + '/'.join(compurl.split('/')[4:])
-            if comp_action(thiscompurl, compdata):
-                count += 1
+                    thiscompurl = projverurl + '/' + '/'.join(compurl.split('/')[4:])
+                    if comp_action(thiscompurl, compdata):
+                        count += 1
 
     toast = ''
     if count > 0:
         toast = make_comp_toast("{} Components {}".format(count, confirmation))
 
-    return vdata, toast
+    return origdata, toast
+
+
+@app.callback(
+    [
+        Output('vulnstable', 'data'),
+        Output("toast-container-vuln", "children"),
+    ],
+    [
+        Input('button_vuln_selected', 'n_clicks'),
+        Input('button_vuln_all', 'n_clicks'),
+        State('sel_vuln_action', 'value'),
+        State('vulnstable', 'data'),
+        State('vulnstable', 'derived_virtual_data'),
+        State('vulnstable', 'derived_virtual_selected_rows'),
+        State('projverurl', 'data'),
+    ]
+)
+def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
+                   origdata, vdata, selected_rows, projverurl):
+    global hub
+
+    print("cb_vulnactions")
+    ctx = dash.callback_context.triggered[0]
+    ctx_caller = ctx['prop_id']
+    if ctx_caller == 'button_vuln_selected.n_clicks':
+        rows = selected_rows
+    elif ctx_caller == 'button_vuln_all.n_clicks':
+        rows = range(len(vdata))
+    else:
+        raise dash.exceptions.PreventUpdate
+
+    if len(rows) == 0 or action is None:
+        raise dash.exceptions.PreventUpdate
+
+    custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
+    res = hub.execute_get(projverurl + '/vulnerable-bom-components?limit=5000', custom_headers=custom_headers)
+    if res.status_code != 200:
+        print('Get vulnerabilities - return code ' + res.status_code)
+        return None
+    allvulns = res.json()['items']
+
+    def vuln_action(vhub, comp):
+
+        try:
+            # vuln_name = comp['vulnerabilityWithRemediation']['vulnerabilityName']
+            result = vhub.execute_put(comp['_meta']['href'], data=comp)
+            if result.status_code != 202:
+                return False
+
+        except Exception as e:
+            print("ERROR: Unable to update vulnerabilities via API\n" + str(e))
+            return False
+
+        return True
+
+    vulnaction_dict = {
+        'NEW': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
+        'DUPLICATE': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
+        'IGNORED': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
+        'MITIGATED': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
+        'NEEDS_REVIEW': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
+        'PATCHED': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
+        'REMEDIATION_REQUIRED': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
+        'REMEDIATION_COMPLETE': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
+    }
+
+    count = 0
+    confirmation = ''
+    for row in rows:
+        thisvuln = vdata[row]
+        vulnurl = thisvuln['componentVersion']
+        #
+        # Find component in allcomps list
+        vulndata = next(vuln for vuln in allvulns if vuln["componentVersion"] == vulnurl and
+                        thisvuln['vulnerabilityWithRemediation.vulnerabilityName'] ==
+                        vuln['vulnerabilityWithRemediation']['vulnerabilityName'])
+
+        if vulndata is not None:
+            foundrow = -1
+            if action in vulnaction_dict.keys() and \
+                    vulndata['vulnerabilityWithRemediation']['remediationStatus'] != action:
+                entry = vulnaction_dict[action]
+                # Find entry in original table
+                foundrow = -1
+                for origrow, origcomp in enumerate(origdata):
+                    if (origcomp['componentVersion'] == vulnurl) and \
+                       (thisvuln['vulnerabilityWithRemediation.vulnerabilityName'] ==
+                       origcomp['vulnerabilityWithRemediation']['vulnerabilityName']):
+                        foundrow = origrow
+                        break
+
+                if foundrow >= 0:
+                    origdata[foundrow]['vulnerabilityWithRemediation.remediationStatus'] = action
+                    vulndata['remediationStatus'] = action
+                    vulndata['remediationComment'] = entry['comment']
+                    confirmation = entry['confirmation']
+                    if vuln_action(hub, vulndata):
+                        print('Remediated vuln: ' + vulndata['vulnerabilityWithRemediation']['vulnerabilityName'])
+                        count += 1
+
+    toast = ''
+    if count > 0:
+        toast = make_vuln_toast("{} Components {}".format(count, confirmation))
+
+    return origdata, toast
 
 
 @app.callback(
@@ -1267,21 +1519,23 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
     [
         Input('button_trend', 'n_clicks'),
         State('projverurl', 'data'),
+        State('projname', 'data'),
+        State('vername', 'data'),
     ]
 )
-def cb_trend(button, purl):
+def cb_trend(button, purl, projname, vername):
 
     if button is None:
         raise dash.exceptions.PreventUpdate
 
     print("\n\nProcessing project version '{}'".format(purl))
 
-    compdata, vulndata = trend.proc_journals(hub, purl)
+    compdata, vulndata, scans = trend.proc_journals(hub, purl, vername)
     if compdata is None:
-        return [], []
+        return '', ''
 
-    compfig = trend.create_fig_compstimeline(compdata)
-    vulnfig = trend.create_fig_vulnstimeline(vulndata)
+    compfig = trend.create_fig_compstimeline(compdata, scans)
+    vulnfig = trend.create_fig_vulnstimeline(vulndata, scans)
 
     return dcc.Graph(figure=compfig, id='fig_time_trend'), dcc.Graph(figure=vulnfig, id='fig_time_trend')
 

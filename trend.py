@@ -24,12 +24,28 @@ def proc_events(eventlist):
 
     timelist_comps = []
     timelist_vulns = []
+    scans = []
 
     now = datetime.now()
 
     for event in eventlist:
         evtype = ''
-        if event['type'] == 'COMP_ADDED':
+
+        if event['type'] == 'SCAN_MAPPED' or event['type'] == 'SCAN_UNMAPPED':
+            if event['type'] == 'SCAN_MAPPED':
+                text = 'Scans Mapped'
+            else:
+                text = 'Scans Unmapped'
+
+            scans.append(
+                {
+                    'timestamp': datetime.strptime(event['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ'),
+                    'components': len(comp_dict),
+                    'vulns': len(vuln_list),
+                    'text': text,
+                }
+            )
+        elif event['type'] == 'COMP_ADDED':
             if event['comp'] not in comp_dict.keys():
                 comp_dict[event['comp']] = 1
                 evtype = 'comp'
@@ -63,8 +79,12 @@ def proc_events(eventlist):
                                                                       event['timestamp']))
 
         if evtype == 'comp':
-            timelist_comps.append({'timestamp': event['timestamp'], 'comp_count': len(comp_dict),
-                                   'ignored_count': len(comp_ignored_list)})
+            timelist_comps.append({'timestamp': event['timestamp'], 'Components': len(comp_dict),
+                                   'Ignored Components': len(comp_ignored_list)})
+            timelist_vulns.append({'timestamp': event['timestamp'], 'Unique Vulns': len(vuln_list),
+                                   'Ignored Vulns': len(vuln_ignored_list),
+                                   'Remediated Vulns': len(vuln_remediated_list),
+                                   'Patched Vulns': len(vuln_patched_list)})
         else:
             if event['type'] == 'VULN_ADDED' and event['vuln'] not in vuln_list:
                 vuln_list.append(event['vuln'])
@@ -93,41 +113,45 @@ def proc_events(eventlist):
                 print("Vulnerability PATCHED: {} (total = {}) {}".format(event['vuln'], len(vuln_list),
                                                                          event['timestamp']))
         if evtype == 'vuln':
-            timelist_vulns.append({'timestamp': event['timestamp'], 'vuln_count': len(vuln_list),
-                                   'ignored_count': len(vuln_ignored_list),
-                                   'remediated_count': len(vuln_remediated_list),
-                                   'patched_count': len(vuln_patched_list)})
+            timelist_vulns.append({'timestamp': event['timestamp'], 'Unique Vulns': len(vuln_list),
+                                   'Ignored Vulns': len(vuln_ignored_list),
+                                   'Remediated Vulns': len(vuln_remediated_list),
+                                   'Patched Vulns': len(vuln_patched_list)})
+            timelist_comps.append({'timestamp': event['timestamp'], 'Components': len(comp_dict),
+                                   'Ignored Components': len(comp_ignored_list)})
 
-    timelist_comps.append({'timestamp': now.strftime("%Y/%m/%d %H:%M:%S"), 'comp_count': len(comp_dict),
-                           'ignored_count': len(comp_ignored_list)})
 
-    timelist_vulns.append({'timestamp': now.strftime("%Y/%m/%d %H:%M:%S"), 'vuln_count': len(vuln_list),
-                           'ignored_count': len(vuln_ignored_list),
-                           'remediated_count': len(vuln_remediated_list),
-                           'patched_count': len(vuln_patched_list)})
+    timelist_comps.append({'timestamp': now.strftime("%Y/%m/%d %H:%M:%S"), 'Components': len(comp_dict),
+                           'Ignored Components': len(comp_ignored_list)})
+
+    timelist_vulns.append({'timestamp': now.strftime("%Y/%m/%d %H:%M:%S"), 'Unique Vulns': len(vuln_list),
+                           'Ignored Vulns': len(vuln_ignored_list),
+                           'Remediated Vulns': len(vuln_remediated_list),
+                           'Patched Vulns': len(vuln_patched_list)})
     # print(json.dumps(timelist_comps, indent=4))
 
-    return timelist_comps, timelist_vulns
+    return timelist_comps, timelist_vulns, scans
 
 
-def proc_journals(hub, url):
+def proc_journals(hub, projverurl, pjvername):
 
     # compeventaction_dict = {}
     # compeventtime_dict = {}
 
-    if url is None:
-        return
+    if projverurl is None:
+        return None, None, None
 
     headers = {'Accept': 'application/vnd.blackducksoftware.journal-4+json'}
-    arr = url.split('/')
+    arr = projverurl.split('/')
     # https://poc39.blackduck.synopsys.com/api/projects/5e048290-0d1d-4637-a276-75d7cb50de6a/versions/3b14487c-c860-471d-bee1-c7d443949df5/components
 
-    journallurl = "{}/api/journal/projects/{}/versions/{}?limit=50000".format('/'.join(arr[:3]), arr[5], arr[7])
-    response = hub.execute_get(journallurl, custom_headers=headers)
-    jsondata = response.json()
+    projjournalurl = "{}/api/journal/projects/{}".format('/'.join(arr[:3]), arr[5])
+    verjournalurl = "{}/versions/{}?limit=50000".format(projjournalurl, arr[7])
+    response = hub.execute_get(verjournalurl, custom_headers=headers)
 
     if not response.ok:
-        return None, None
+        return None, None, None
+    jsondata = response.json()
 
     # def addcompeevent(ceventaction_dict, ceventtime_dict, cname, ctime):
     #     if cname not in ceventaction_dict.keys():
@@ -142,29 +166,34 @@ def proc_journals(hub, url):
     event_list = jsondata['items']
     events = []
     for event in event_list:
-        print(event)
-        if event['action'] == 'Component Added':
+        if event['action'] == 'Scan Mapped':
+            print(event)
+            events.append({'timestamp': event['timestamp'], 'type': 'SCAN_MAPPED'})
+        elif event['action'] == 'Scan Unmapped':
+            print(event)
+            events.append({'timestamp': event['timestamp'], 'type': 'SCAN_UNMAPPED'})
+        elif event['action'] == 'Component Added':
             if 'version' in event['currentData']:
                 compname = event['objectData']['name'] + "/" + event['currentData']['version']
             else:
                 compname = event['objectData']['name']
             events.append({'timestamp': event['timestamp'], 'type': 'COMP_ADDED', 'comp': compname})
             print('RAW COMPONENT ADDED')
-        if event['action'] == 'Component Ignored':
+        elif event['action'] == 'Component Ignored':
             if 'version' in event['currentData']:
                 compname = event['objectData']['name'] + "/" + event['currentData']['version']
             else:
                 compname = event['objectData']['name']
             events.append({'timestamp': event['timestamp'], 'type': 'COMP_IGNORED', 'comp': compname})
             print('RAW COMPONENT IGNORED')
-        if event['action'] == 'Component Deleted':
+        elif event['action'] == 'Component Deleted':
             if 'version' in event['currentData']:
                 compname = event['objectData']['name'] + "/" + event['currentData']['version']
             else:
                 compname = event['objectData']['name']
             events.append({'timestamp': event['timestamp'], 'type': 'COMP_REMOVED', 'comp': compname})
             print('RAW COMPONENT REMOVED')
-        if event['action'] == 'Vulnerability Found':
+        elif event['action'] == 'Vulnerability Found':
             # print(event)
             vulnname = event['objectData']['name']
             vulnsev = event['currentData']['riskPriority']
@@ -179,7 +208,7 @@ def proc_journals(hub, url):
                            'comp': compname,
                            'vulnsev': vulnsev})
             print('RAW VULN_ADDED')
-        if event['action'] == 'Remediation Updated':
+        elif event['action'] == 'Remediation Updated':
             # print(event)
             vulnname = event['objectData']['name']
             vulnsev = ''
@@ -204,26 +233,42 @@ def proc_journals(hub, url):
                                'comp': compname,
                                'vulnsev': vulnsev})
 
-    # headers = {'Accept': 'application/vnd.blackducksoftware.journal-4+json'}
-    # url = "{}/journal/projects/{}?limit=10000".format(hub.get_apibase(), pjprojid)
-    # response = hub.execute_get(url, custom_headers=headers)
-    # jsondata = response.json()
+    # Need to check that this project has project propagation first
     #
-    # event_list = jsondata['items']
-    # ver_create_date = ''
-    # for event in event_list:
-    #     if event['objectData']['type'] == 'VERSION' and event['objectData']['name'] == pjvername:
-    #         ver_create_date = event['timestamp']
-    #
-    #     if event['timestamp'] > ver_create_date and event['objectData']['type'] == 'COMPONENT' \
-    #             and event['currentData']['adjustmentType'] == 'Ignore':
-    #         if 'releaseVersion' in event['currentData']:
-    #             compname = event['objectData']['name'] + "/" + event['currentData']['releaseVersion']
-    #         else:
-    #             compname = event['objectData']['name']
-    #         events.append({'timestamp': event['timestamp'], 'type': 'IGNORED', 'comp': compname})
-    #         # print('COMP_IGNORED')
-    #     # print(event['timestamp'] + ": ", event['currentData'])
+    headers = {'Accept': 'application/vnd.blackducksoftware.project-detail-4+json'}
+
+    arr = projverurl.split('/')
+    projurl = "{}/api/projects/{}".format('/'.join(arr[:3]), arr[5])
+    response = hub.execute_get(projurl, custom_headers=headers)
+
+    if not response.ok:
+        return None, None
+    projconf = response.json()
+
+    if 'projectLevelAdjustments' in projconf and projconf['projectLevelAdjustments']:
+        # Project version uses project level adjustments
+
+        headers = {'Accept': 'application/vnd.blackducksoftware.journal-4+json'}
+
+        response = hub.execute_get(projjournalurl + '?limit=50000', custom_headers=headers)
+        if response.ok:
+            jsondata = response.json()
+
+            event_list = jsondata['items']
+            ver_create_date = ''
+            for event in event_list:
+                if event['objectData']['type'] == 'VERSION' and event['objectData']['name'] == pjvername:
+                    ver_create_date = event['timestamp']
+
+                if event['timestamp'] > ver_create_date and event['objectData']['type'] == 'COMPONENT' \
+                        and event['currentData']['adjustmentType'] == 'Ignore':
+                    if 'releaseVersion' in event['currentData']:
+                        compname = event['objectData']['name'] + "/" + event['currentData']['releaseVersion']
+                    else:
+                        compname = event['objectData']['name']
+                    events.append({'timestamp': event['timestamp'], 'type': 'IGNORED', 'comp': compname})
+                    # print('COMP_IGNORED')
+                # print(event['timestamp'] + ": ", event['currentData'])
 
     print()
 
@@ -238,32 +283,56 @@ def proc_journals(hub, url):
     return proc_events(events)
 
 
-def create_fig_compstimeline(compevents):
+def create_fig_compstimeline(compevents, scans):
     df = pd.DataFrame(compevents)
 
     if not compevents:
         df["timestamp"] = ''
-        df["comp_count"] = 0
+        df["Components"] = 0
 
     df["timestamp"] = pd.to_datetime(df["timestamp"], format="%Y-%m-%d %H:%M:%S")
 
-    fig = px.scatter(df, x='timestamp', y=['comp_count', 'ignored_count'], labels={'x': 'Components',
-                                                                                   'y': 'Ignored Components'})
+    fig = px.scatter(df, x='timestamp', y=['Components', 'Ignored Components'])
     fig.update_traces(mode='lines')
+    fig.update_yaxes(title_text='Components')
+    fig.update_xaxes(title_text='Date')
+
+    prevscan = None
+    for scan in scans:
+        if prevscan is not None and prevscan['text'] == scan['text']:
+            diff = scan['timestamp'] - prevscan['timestamp']
+            if diff.total_seconds() < 120:
+                prevscan = scan
+                continue
+        fig.add_annotation(row=1, col=1, y=scan['components'], x=scan['timestamp'], text=scan['text'], arrowhead=1)
+        prevscan = scan
 
     return fig
 
 
-def create_fig_vulnstimeline(vulnevents):
+def create_fig_vulnstimeline(vulnevents, scans):
     df = pd.DataFrame(vulnevents)
 
     if not vulnevents:
         df["timestamp"] = ''
-        df["vuln_count"] = 0
+        df["Unique Vulns"] = 0
 
     df["timestamp"] = pd.to_datetime(df["timestamp"], format="%Y-%m-%d %H:%M:%S")
 
-    fig = px.scatter(df, x='timestamp', y=['vuln_count', 'ignored_count', 'remediated_count', 'patched_count'])
+    fig = px.scatter(df, x='timestamp', y=['Unique Vulns', 'Ignored Vulns', 'Remediated Vulns',
+                                           'Patched Vulns'])
     fig.update_traces(mode='lines')
+    fig.update_yaxes(title_text='Vulnerabilities')
+    fig.update_xaxes(title_text='Date')
+
+    prevscan = None
+    for scan in scans:
+        if prevscan is not None and prevscan['text'] == scan['text']:
+            diff = scan['timestamp'] - prevscan['timestamp']
+            if diff.total_seconds() < 120:
+                prevscan = scan
+                continue
+        fig.add_annotation(row=1, col=1, y=scan['vulns'], x=scan['timestamp'], text=scan['text'], arrowhead=1)
+        prevscan = scan
 
     return fig

@@ -38,6 +38,7 @@ def get_snippets_data(hub, path):
                                                         "status", "scanid", "nodeid", "snippetid")
     alreadyignored = 0
     count = 0
+    print('Getting snippet data ... ')
     snippet_bom_entries = get_snippet_entries(hub, path)
     if snippet_bom_entries != '':
         # print(snippet_bom_entries)
