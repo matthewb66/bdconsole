@@ -1136,7 +1136,7 @@ def cb_vertable(row, verdata, projname):
     custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
     resp = hub.execute_get(path, custom_headers=custom_headers)
     if resp.status_code != 200:
-        print('component list response ' + resp.status_code)
+        print('component list response ' + str(resp.status_code))
         toast = make_ver_toast('Unable to get components - check permissions')
         return '', '', True, "Components", True, '', True, '', True, '', vername, projverurl, toast
 
@@ -1337,10 +1337,10 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
     compaction_dict = {
         'IGNORE':
             {'field': 'ignored', 'value': True,
-             'confirmation': 'Ignored', 'display': True},
+             'confirmation': 'Ignored', 'display': 'True'},
         'UNIGNORE':
             {'field': 'ignored', 'value': False,
-             'confirmation': 'Ignored', 'display': False},
+             'confirmation': 'Ignored', 'display': 'False'},
         'REVIEW':
             {'field': 'reviewStatus', 'value': 'REVIEWED',
              'confirmation': 'Set Reviewed', 'display': 'REVIEWED'},
@@ -1442,7 +1442,7 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
     res = hub.execute_get(projverurl + '/vulnerable-bom-components?limit=5000', custom_headers=custom_headers)
     if res.status_code != 200:
         print('Get vulnerabilities - return code ' + res.status_code)
-        return None
+        return origdata, make_vuln_toast('Unable to update vulnerability')
     allvulns = res.json()['items']
 
     def vuln_action(vhub, comp):
@@ -1481,28 +1481,31 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
                         thisvuln['vulnerabilityWithRemediation.vulnerabilityName'] ==
                         vuln['vulnerabilityWithRemediation']['vulnerabilityName'])
 
-        if vulndata is not None:
+        if vulndata is not None and action in vulnaction_dict.keys() and \
+                vulndata['vulnerabilityWithRemediation']['remediationStatus'] != action:
+            entry = vulnaction_dict[action]
+            # Find entry in original table
             foundrow = -1
-            if action in vulnaction_dict.keys() and \
-                    vulndata['vulnerabilityWithRemediation']['remediationStatus'] != action:
-                entry = vulnaction_dict[action]
-                # Find entry in original table
-                foundrow = -1
-                for origrow, origcomp in enumerate(origdata):
-                    if (origcomp['componentVersion'] == vulnurl) and \
-                       (thisvuln['vulnerabilityWithRemediation.vulnerabilityName'] ==
-                       origcomp['vulnerabilityWithRemediation']['vulnerabilityName']):
-                        foundrow = origrow
-                        break
+            for origrow, origcomp in enumerate(origdata):
+                if (origcomp['componentVersion'] == vulnurl) and \
+                   (thisvuln['vulnerabilityWithRemediation.vulnerabilityName'] ==
+                   origcomp['vulnerabilityWithRemediation.vulnerabilityName']):
+                    foundrow = origrow
+                    break
 
-                if foundrow >= 0:
-                    origdata[foundrow]['vulnerabilityWithRemediation.remediationStatus'] = action
-                    vulndata['remediationStatus'] = action
-                    vulndata['remediationComment'] = entry['comment']
-                    confirmation = entry['confirmation']
-                    if vuln_action(hub, vulndata):
-                        print('Remediated vuln: ' + vulndata['vulnerabilityWithRemediation']['vulnerabilityName'])
-                        count += 1
+            if foundrow >= 0:
+                origdata[foundrow]['vulnerabilityWithRemediation.remediationStatus'] = action
+                vulndata['remediationStatus'] = action
+                vulndata['remediationComment'] = entry['comment']
+                confirmation = entry['confirmation']
+                if vuln_action(hub, vulndata):
+                    print('Remediated vuln: ' + vulndata['vulnerabilityWithRemediation']['vulnerabilityName'])
+                    count += 1
+                else:
+                    break
+
+    if foundrow < 0:
+        return origdata, make_vuln_toast('Unable to update vulnerability')
 
     toast = ''
     if count > 0:
