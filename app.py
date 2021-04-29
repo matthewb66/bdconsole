@@ -12,6 +12,7 @@ import dash_auth
 import dash_table
 import subprocess
 import io
+from datetime import datetime
 
 import snippets
 import trend
@@ -671,8 +672,8 @@ def create_snippetstab(snippetcsv, projname, vername):
                                     {'label': 'Select Action ...', 'value': 'NOTHING'},
                                     {'label': 'Ignore', 'value': 'IGNORE'},
                                     {'label': 'Unignore', 'value': 'UNIGNORE'},
-                                    {'label': 'Confirm', 'value': 'CONFIRM'},
-                                    {'label': 'Unconfirm', 'value': 'UNCONFIRM'},
+                                    # {'label': 'Confirm', 'value': 'CONFIRM'},
+                                    # {'label': 'Unconfirm', 'value': 'UNCONFIRM'},
                                 ],
                                 multi=False,
                                 placeholder='Select Action ...'
@@ -758,33 +759,38 @@ def create_snippetstab(snippetcsv, projname, vername):
 
 
 def create_vercard(ver, comps, vername, projname):
-
-    if ver is None or comps is None:
-        projlink = ''
-        compcount = ''
-        # verbutton = ''
-    else:
-        vername = ver['versionName']
-        projlink = ver['_meta.href'] + "/components"
-        compcount = len(comps.index)
+    table_body = []
+    projlink = ''
+    if ver is not None and comps is not None:
         # verbutton = dbc.Button("Select Version", id="verbutton", className="mr-2", size='sm')
+        table_rows = [
+            html.Tr([html.Td("Component Count:"), html.Td(len(comps.index))]),
+            html.Tr([html.Td("Phase:"), html.Td(ver['phase'])]),
+            html.Tr([html.Td("Distribution:"), html.Td(ver['distribution'])]),
+            html.Tr([html.Td("License:"), html.Td(ver['license.licenseDisplay'])]),
+            html.Tr([html.Td("Owner:"), html.Td(ver['createdBy'])]),
+            html.Tr([html.Td("Create Date:"),
+                     html.Td(datetime.strptime(ver['createdAt'], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%Y-%m-%d %H:%M"))]),
+            html.Tr([html.Td("Last Update Date:"),
+                    html.Td(datetime.strptime(ver['settingUpdatedAt'],
+                                              '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%Y-%m-%d %H:%M"))]),
+        ]
+        table_body = [html.Tbody(table_rows)]
+        projlink = ver['_meta.href'] + '/components'
+
+    table_header = []
 
     return dbc.Card(
         [
-            dbc.CardHeader("Project: " + projname),
+            dbc.CardHeader("Project: " + projname, style={'classname': 'card-title'}),
             dbc.CardBody(
                 [
-                    html.Div([
-                        "Project Version: ",
-                        html.A(vername, href=projlink,
-                               target="_blank",
-                               style={'margin-left': '10px'}),
-                    ], style={'display': 'flex',
-                              'classname': 'card-title'}),
+                    html.H6("Project Version: " + vername, style={'display': 'flex', 'classname': 'card-title'}),
                     html.Br(),
-                    html.Div("Components: " + str(compcount)),
+                    dbc.Table(table_header + table_body, bordered=True),
                 ],
             ),
+            dbc.CardFooter(dbc.CardLink('Project Version link', href=projlink)),
             # dbc.Table(table_header + table_body, bordered=True),
             # projusedbytitle, projstable,
             # html.Div(verbutton),
@@ -1340,7 +1346,7 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
              'confirmation': 'Ignored', 'display': 'True'},
         'UNIGNORE':
             {'field': 'ignored', 'value': False,
-             'confirmation': 'Ignored', 'display': 'False'},
+             'confirmation': 'Unignored', 'display': 'False'},
         'REVIEW':
             {'field': 'reviewStatus', 'value': 'REVIEWED',
              'confirmation': 'Set Reviewed', 'display': 'REVIEWED'},
@@ -1445,8 +1451,8 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
         return origdata, make_vuln_toast('Unable to update vulnerability')
     allvulns = res.json()['items']
 
-    def vuln_action(vhub, comp):
 
+    def vuln_action(vhub, comp):
         try:
             # vuln_name = comp['vulnerabilityWithRemediation']['vulnerabilityName']
             result = vhub.execute_put(comp['_meta']['href'], data=comp)
@@ -1460,18 +1466,19 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
         return True
 
     vulnaction_dict = {
-        'NEW': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
-        'DUPLICATE': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
-        'IGNORED': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
-        'MITIGATED': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
-        'NEEDS_REVIEW': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
-        'PATCHED': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
-        'REMEDIATION_REQUIRED': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
-        'REMEDIATION_COMPLETE': {'confirmation': 'Ignored', 'comment': 'Ignored in batch'},
+        'NEW': {'confirmation': 'Change to New', 'comment': 'Updated by bdconsole'},
+        'DUPLICATE': {'confirmation': 'changed to Duplicate', 'comment': 'Updated by bdconsole'},
+        'IGNORED': {'confirmation': 'changed to Ignored', 'comment': 'Updated by bdconsole'},
+        'MITIGATED': {'confirmation': 'changed to Mitigated', 'comment': 'Updated by bdconsole'},
+        'NEEDS_REVIEW': {'confirmation': 'changed to Needs Review', 'comment': 'Updated by bdconsole'},
+        'PATCHED': {'confirmation': 'changed to Patch', 'comment': 'Updated by bdconsole'},
+        'REMEDIATION_REQUIRED': {'confirmation': 'changed to Remediation Required', 'comment': 'Updated by bdconsole'},
+        'REMEDIATION_COMPLETE': {'confirmation': 'changed to Remediation Complete', 'comment': 'Updated by bdconsole'},
     }
 
     count = 0
     confirmation = ''
+    error = False
     for row in rows:
         thisvuln = vdata[row]
         vulnurl = thisvuln['componentVersion']
@@ -1502,10 +1509,14 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
                     print('Remediated vuln: ' + vulndata['vulnerabilityWithRemediation']['vulnerabilityName'])
                     count += 1
                 else:
-                    break
+                    error = True
+            else:
+                error = True
+        else:
+            error = True
 
-    if foundrow < 0:
-        return origdata, make_vuln_toast('Unable to update vulnerability')
+    if error:
+        return origdata, make_vuln_toast('Unable to update vulnerabilities')
 
     toast = ''
     if count > 0:
