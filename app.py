@@ -834,6 +834,8 @@ app.layout = dbc.Container(
         dcc.Store(id='projname', storage_type='session'),
         dcc.Store(id='vername', storage_type='session'),
         dcc.Store(id='projverurl', storage_type='session'),
+        dcc.Store(id='allvulndata', storage_type='session'),
+        dcc.Store(id='allcompdata', storage_type='session'),
         dbc.NavbarSimple(
             children=[
                 dbc.NavItem(dbc.NavLink("Documentation", href="https://github.com/matthewb66/bdconsole")),
@@ -1119,6 +1121,8 @@ def cb_projtable(row, vprojdata):
         Output("spdx_file", "value"),
         Output('vername', 'data'),
         Output('projverurl', 'data'),
+        Output('allcompdata', 'data'),
+        Output('allvulndata', 'data'),
         Output("toast-container-ver", "children")
     ],
     [
@@ -1144,7 +1148,8 @@ def cb_vertable(row, verdata, projname):
     if resp.status_code != 200:
         print('component list response ' + str(resp.status_code))
         toast = make_ver_toast('Unable to get components - check permissions')
-        return '', '', True, "Components", True, '', True, '', True, '', vername, projverurl, toast
+        return '', '', True, "Components", True, '', True, '', True, '', vername, projverurl, \
+               None, None, toast
 
     compdata = resp.json()
     df_comp_new = pd.json_normalize(compdata, record_path=['items'])
@@ -1167,7 +1172,7 @@ def cb_vertable(row, verdata, projname):
         create_snippetstab(snippetdata, projname, vername), False, "Snippets (" + str(snipcount) + ")", \
         False, create_trendtab(projname, vername, '', ''), \
         False, "SPDX_" + projname + '-' + vername + ".json", vername, projverurl, \
-        ''
+        compdata, df_vuln_new.to_json(), ''
 
 
 @app.callback(
@@ -1304,10 +1309,11 @@ def cb_snipactions(snip_selected_clicks, snip_all_clicks, action,
         State('compstable', 'derived_virtual_data'),
         State('compstable', 'derived_virtual_selected_rows'),
         State('projverurl', 'data'),
+        State('allcompdata', 'data'),
     ]
 )
 def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
-                   origdata, vdata, selected_rows, projverurl):
+                   origdata, vdata, selected_rows, projverurl, allcompdata):
     global hub
 
     print("cb_compactions")
@@ -1323,11 +1329,12 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
     if len(rows) == 0 or action is None:
         raise dash.exceptions.PreventUpdate
 
-    custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
-    resp = hub.execute_get(projverurl + '/components?limit=5000', custom_headers=custom_headers)
-    if not resp.ok:
-        raise dash.exceptions.PreventUpdate
-    allcomps = resp.json()['items']
+    # custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
+    # resp = hub.execute_get(projverurl + '/components?limit=5000', custom_headers=custom_headers)
+    # if not resp.ok:
+    #     raise dash.exceptions.PreventUpdate
+    # allcomps = resp.json()['items']
+    allcomps = allcompdata['items']
 
     def comp_action(url, cdata):
         custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json',
@@ -1425,10 +1432,11 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
         State('vulnstable', 'derived_virtual_data'),
         State('vulnstable', 'derived_virtual_selected_rows'),
         State('projverurl', 'data'),
+        State('allvulndata', 'data'),
     ]
 )
 def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
-                   origdata, vdata, selected_rows, projverurl):
+                   origdata, vdata, selected_rows, projverurl, allvulndata):
     global hub
 
     print("cb_vulnactions")
@@ -1444,14 +1452,14 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
     if len(rows) == 0 or action is None:
         raise dash.exceptions.PreventUpdate
 
-    custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
-    res = hub.execute_get(projverurl + '/vulnerable-bom-components?limit=5000', custom_headers=custom_headers)
-    if res.status_code != 200:
-        print('Get vulnerabilities - return code ' + res.status_code)
-        return origdata, make_vuln_toast('Unable to update vulnerability')
-    allvulns = res.json()['items']
-
-
+    # custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
+    # res = hub.execute_get(projverurl + '/vulnerable-bom-components?limit=5000', custom_headers=custom_headers)
+    # if res.status_code != 200:
+    #     print('Get vulnerabilities - return code ' + res.status_code)
+    #     return origdata, make_vuln_toast('Unable to update vulnerability')
+    # allvulns = res.json()['items']
+    allvulns = json.loads(allvulndata)
+xxxxx
     def vuln_action(vhub, comp):
         try:
             # vuln_name = comp['vulnerabilityWithRemediation']['vulnerabilityName']
@@ -1481,22 +1489,26 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
     error = False
     for row in rows:
         thisvuln = vdata[row]
-        vulnurl = thisvuln['componentVersion']
+        vulnurl = thisvuln['_meta.href']
         #
         # Find component in allcomps list
-        vulndata = next(vuln for vuln in allvulns if vuln["componentVersion"] == vulnurl and
-                        thisvuln['vulnerabilityWithRemediation.vulnerabilityName'] ==
-                        vuln['vulnerabilityWithRemediation']['vulnerabilityName'])
+        # vulndata = next(index, vuln for index, vuln in enumerate(allvulns) if vuln["_meta"]['href'] == vulnurl)
+        index = 0
+        vulndata = None
+        for index, vuln in enumerate(allvulns):
+            if vuln['_meta']['href'] == vulnurl:
+                vulndata = vuln
+        print(index)
 
-        if vulndata is not None and action in vulnaction_dict.keys() and \
+        if vulndata is None:
+            error = True
+        elif action in vulnaction_dict.keys() and \
                 vulndata['vulnerabilityWithRemediation']['remediationStatus'] != action:
             entry = vulnaction_dict[action]
             # Find entry in original table
             foundrow = -1
             for origrow, origcomp in enumerate(origdata):
-                if (origcomp['componentVersion'] == vulnurl) and \
-                   (thisvuln['vulnerabilityWithRemediation.vulnerabilityName'] ==
-                   origcomp['vulnerabilityWithRemediation.vulnerabilityName']):
+                if (origcomp['_meta.href'] == vulnurl):
                     foundrow = origrow
                     break
 
@@ -1512,8 +1524,6 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
                     error = True
             else:
                 error = True
-        else:
-            error = True
 
     if error:
         return origdata, make_vuln_toast('Unable to update vulnerabilities')
