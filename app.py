@@ -53,6 +53,11 @@ def get_vulns_data(projverurl):
         return None
     vulns = res.json()
     df = pd.json_normalize(vulns, record_path=['items'])
+    for index, vuln in enumerate(vulns['items']):
+        df.loc[index, 'json'] = json.dumps(vuln)
+
+    df = df.drop_duplicates(subset=["componentVersion",  'vulnerabilityWithRemediation.vulnerabilityName'],
+                            keep="first", inplace=False)
 
     if len(df.index) > 0:
         df['vulnerabilityWithRemediation.vulnerabilityPublishedDate'] = \
@@ -62,6 +67,7 @@ def get_vulns_data(projverurl):
         df['vulnerabilityWithRemediation.remediationUpdatedAt'] = \
             pd.DatetimeIndex(df['vulnerabilityWithRemediation.remediationUpdatedAt']).strftime("%Y-%m-%d")
 
+    vulnjson = df.to_json(orient='records')
     print('Found ' + str(len(df.index)) + ' vulnerabilities')
     return df
 
@@ -834,7 +840,7 @@ app.layout = dbc.Container(
         dcc.Store(id='projname', storage_type='session'),
         dcc.Store(id='vername', storage_type='session'),
         dcc.Store(id='projverurl', storage_type='session'),
-        dcc.Store(id='allvulndata', storage_type='session'),
+        # dcc.Store(id='allvulndata', storage_type='session'),
         dcc.Store(id='allcompdata', storage_type='session'),
         dbc.NavbarSimple(
             children=[
@@ -1161,7 +1167,7 @@ def cb_vertable(row, verdata, projname):
     #     df_comp_new.loc[(df_comp_new.ignored == True), 'ignored'] = '❗'
     #     df_comp_new.loc[(df_comp_new.ignored != True), 'ignored'] = 'Not Ignored'
 
-    df_vuln_new = get_vulns_data(projverurl)
+    df_vuln_new, vulndata = get_vulns_data(projverurl)
 
     snippetdata, snipcount = snippets.get_snippets_data(hub, projverurl)
 
@@ -1172,7 +1178,7 @@ def cb_vertable(row, verdata, projname):
         create_snippetstab(snippetdata, projname, vername), False, "Snippets (" + str(snipcount) + ")", \
         False, create_trendtab(projname, vername, '', ''), \
         False, "SPDX_" + projname + '-' + vername + ".json", vername, projverurl, \
-        compdata, df_vuln_new.to_json(), ''
+        compdata, vulndata, ''
 
 
 @app.callback(
@@ -1431,12 +1437,12 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
         State('vulnstable', 'data'),
         State('vulnstable', 'derived_virtual_data'),
         State('vulnstable', 'derived_virtual_selected_rows'),
-        State('projverurl', 'data'),
-        State('allvulndata', 'data'),
+        # State('projverurl', 'data'),
+        # State('allvulndata', 'data'),
     ]
 )
 def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
-                   origdata, vdata, selected_rows, projverurl, allvulndata):
+                   origdata, vdata, selected_rows):
     global hub
 
     print("cb_vulnactions")
@@ -1452,14 +1458,14 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
     if len(rows) == 0 or action is None:
         raise dash.exceptions.PreventUpdate
 
+    print(allvulndata)
     # custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
     # res = hub.execute_get(projverurl + '/vulnerable-bom-components?limit=5000', custom_headers=custom_headers)
     # if res.status_code != 200:
     #     print('Get vulnerabilities - return code ' + res.status_code)
     #     return origdata, make_vuln_toast('Unable to update vulnerability')
     # allvulns = res.json()['items']
-    allvulns = json.loads(allvulndata)
-xxxxx
+
     def vuln_action(vhub, comp):
         try:
             # vuln_name = comp['vulnerabilityWithRemediation']['vulnerabilityName']
@@ -1489,39 +1495,38 @@ xxxxx
     error = False
     for row in rows:
         thisvuln = vdata[row]
-        vulnurl = thisvuln['_meta.href']
+        # vulnurl = thisvuln['_meta.href']
         #
         # Find component in allcomps list
         # vulndata = next(index, vuln for index, vuln in enumerate(allvulns) if vuln["_meta"]['href'] == vulnurl)
-        index = 0
-        vulndata = None
-        for index, vuln in enumerate(allvulns):
-            if vuln['_meta']['href'] == vulnurl:
-                vulndata = vuln
-        print(index)
+        # index = -1
+        # vulndata = None
+        # for index, vuln in enumerate(allvulndata):
+        #     if vuln['_meta']['href'] == vulnurl:
+        #         vulndata = vuln
+        #         break
+        # print(index)
 
-        if vulndata is None:
-            error = True
-        elif action in vulnaction_dict.keys() and \
+        # if vulndata is None or index == -1:
+        #     error = True
+        vulndata = thisvuln['json']
+        if action in vulnaction_dict.keys() and \
                 vulndata['vulnerabilityWithRemediation']['remediationStatus'] != action:
             entry = vulnaction_dict[action]
             # Find entry in original table
-            foundrow = -1
-            for origrow, origcomp in enumerate(origdata):
-                if (origcomp['_meta.href'] == vulnurl):
-                    foundrow = origrow
-                    break
+            # foundrow = -1
+            # for origrow, origcomp in enumerate(origdata):
+            #     if (origcomp['_meta.href'] == vulnurl):
+            #         foundrow = origrow
+            #         break
 
-            if foundrow >= 0:
-                origdata[foundrow]['vulnerabilityWithRemediation.remediationStatus'] = action
-                vulndata['remediationStatus'] = action
-                vulndata['remediationComment'] = entry['comment']
-                confirmation = entry['confirmation']
-                if vuln_action(hub, vulndata):
-                    print('Remediated vuln: ' + vulndata['vulnerabilityWithRemediation']['vulnerabilityName'])
-                    count += 1
-                else:
-                    error = True
+            origdata[index]['vulnerabilityWithRemediation.remediationStatus'] = action
+            vulndata['remediationStatus'] = action
+            vulndata['remediationComment'] = entry['comment']
+            confirmation = entry['confirmation']
+            if vuln_action(hub, vulndata):
+                print('Remediated vuln: ' + vulndata['vulnerabilityWithRemediation']['vulnerabilityName'])
+                count += 1
             else:
                 error = True
 
