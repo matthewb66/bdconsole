@@ -20,7 +20,6 @@ import trend
 from blackduck.HubRestApi import HubInstance
 
 hub = HubInstance()
-serverurl = "https://poc39.blackduck.synopsys.com"
 spdx_proc = None
 
 
@@ -44,6 +43,25 @@ def get_versions_data(proj):
     return df
 
 
+def get_comps_data(projverurl):
+    print('Getting components ...')
+    path = projverurl + "/components?limit=5000"
+
+    custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
+    resp = hub.execute_get(path, custom_headers=custom_headers)
+    if resp.status_code != 200:
+        print('component list response ' + str(resp.status_code))
+        return None
+
+    comps = resp.json()
+    df = pd.json_normalize(comps, record_path=['items'])
+    for index, comp in enumerate(comps['items']):
+        df.loc[index, 'json'] = json.dumps(comp)
+
+    print('Found ' + str(len(df.index)) + ' Components')
+    return df
+
+
 def get_vulns_data(projverurl):
     print('Getting Vulnerabilities ...')
     custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
@@ -60,6 +78,7 @@ def get_vulns_data(projverurl):
                             keep="first", inplace=False)
 
     if len(df.index) > 0:
+        df = df[df['ignored'] != True]
         df['vulnerabilityWithRemediation.vulnerabilityPublishedDate'] = \
             pd.DatetimeIndex(df['vulnerabilityWithRemediation.vulnerabilityPublishedDate']).strftime("%Y-%m-%d")
         df['vulnerabilityWithRemediation.vulnerabilityUpdatedDate'] = \
@@ -67,7 +86,6 @@ def get_vulns_data(projverurl):
         df['vulnerabilityWithRemediation.remediationUpdatedAt'] = \
             pd.DatetimeIndex(df['vulnerabilityWithRemediation.remediationUpdatedAt']).strftime("%Y-%m-%d")
 
-    vulnjson = df.to_json(orient='records')
     print('Found ' + str(len(df.index)) + ' vulnerabilities')
     return df
 
@@ -283,7 +301,7 @@ def create_compstab(compdata, projname, vername):
         ),
         dbc.Row(
             [
-                dbc.Col(html.H5("Project: " + projname + " Version: " + vername), width=5),
+                dbc.Col(html.H5("Project: " + projname + " - Version: " + vername), width=8),
                 dbc.Col(
                     dcc.Dropdown(
                         id="sel_comp_action",
@@ -304,13 +322,13 @@ def create_compstab(compdata, projname, vername):
                         ],
                         multi=False,
                         placeholder='Select Action ...'
-                    ), width=3,
+                    ), width=2,
                     align='center',
                 ),
-                dbc.Col(dbc.Button("Process Selected", id="button_comp_selected",
-                                   className="mr-2", size='sm'), width=2),
-                dbc.Col(dbc.Button("Process ALL in Table", id="button_comp_all",
-                                   className="mr-2", size='sm'), width=2),
+                dbc.Col(dbc.Button("Selected", id="button_comp_selected",
+                                   className="mr-2", size='sm'), width=1),
+                dbc.Col(dbc.Button("All Filtered", id="button_comp_all",
+                                   className="mr-2", size='sm'), width=1),
             ]
         ),
         dbc.Row(
@@ -449,7 +467,7 @@ def create_vulnstab(vulndata, projname, vername):
         ),
         dbc.Row(
             [
-                dbc.Col(html.H5("Project: " + projname + " Version: " + vername), width=5),
+                dbc.Col(html.H5("Project: " + projname + " - Version: " + vername), width=7),
                 dbc.Col(
                     dcc.Dropdown(
                         id="sel_vuln_action",
@@ -468,13 +486,15 @@ def create_vulnstab(vulndata, projname, vername):
                         ],
                         multi=False,
                         placeholder='Select Remediation ...'
-                    ), width=3,
+                    ), width=2,
                     align='center',
                 ),
-                dbc.Col(dbc.Button("Process Selected", id="button_vuln_selected",
-                                   className="mr-2", size='sm'), width=2),
-                dbc.Col(dbc.Button("Process ALL in Table", id="button_vuln_all",
-                                   className="mr-2", size='sm'), width=2),
+                dbc.Col(dbc.Button("Selected", id="button_vuln_selected",
+                                   className="mr-2", size='sm'), width=1),
+                dbc.Col(dbc.Button("All Filtered", id="button_vuln_all",
+                                   className="mr-2", size='sm'), width=1),
+                dbc.Col(dbc.Button("Reload", id="button_vuln_reload",
+                                   className="mr-2", size='sm'), width=1),
             ]
         ),
         dbc.Row(
@@ -501,6 +521,13 @@ def create_vulnstab(vulndata, projname, vername):
                     ],
                     tooltip_duration=None,
                     style_data_conditional=[
+                        {
+                            'if': {
+                                'filter_query': '{ignored} eq "True"',
+                                'column_id': 'ignored'
+                            },
+                            'display': 'none',
+                        },
                         {
                             'if': {'column_id': 'componentName'},
                             'width': '15%'
@@ -670,7 +697,7 @@ def create_snippetstab(snippetcsv, projname, vername):
                 ),
                 dbc.Row(
                     [
-                        dbc.Col(html.H4("Project: " + projname + " Version: " + vername), width=5),
+                        dbc.Col(html.H5("Project: " + projname + " - Version: " + vername), width=8),
                         dbc.Col(
                             dcc.Dropdown(
                                 id="sel_snip_action",
@@ -683,13 +710,13 @@ def create_snippetstab(snippetcsv, projname, vername):
                                 ],
                                 multi=False,
                                 placeholder='Select Action ...'
-                            ), width=3,
+                            ), width=2,
                             align='center',
                         ),
-                        dbc.Col(dbc.Button("Process Selected", id="button_snip_selected",
-                                           className="mr-2", size='sm'), width=2),
-                        dbc.Col(dbc.Button("Process ALL in Table", id="button_snip_all",
-                                           className="mr-2", size='sm'), width=2),
+                        dbc.Col(dbc.Button("Selected", id="button_snip_selected",
+                                           className="mr-2", size='sm'), width=1),
+                        dbc.Col(dbc.Button("All Filtered", id="button_snip_all",
+                                           className="mr-2", size='sm'), width=1),
                     ]
                 ),
                 dbc.Row(
@@ -841,13 +868,13 @@ app.layout = dbc.Container(
         dcc.Store(id='vername', storage_type='session'),
         dcc.Store(id='projverurl', storage_type='session'),
         # dcc.Store(id='allvulndata', storage_type='session'),
-        dcc.Store(id='allcompdata', storage_type='session'),
+        # dcc.Store(id='allcompdata', storage_type='session'),
         dbc.NavbarSimple(
             children=[
                 dbc.NavItem(dbc.NavLink("Documentation", href="https://github.com/matthewb66/bdconsole")),
             ],
             brand="Black Duck Project Console",
-            brand_href=serverurl,
+            brand_href=hub.get_apibase(),
             color="primary",
             dark=True,
             fluid=True,
@@ -1127,8 +1154,8 @@ def cb_projtable(row, vprojdata):
         Output("spdx_file", "value"),
         Output('vername', 'data'),
         Output('projverurl', 'data'),
-        Output('allcompdata', 'data'),
-        Output('allvulndata', 'data'),
+        # Output('allcompdata', 'data'),
+        # Output('allvulndata', 'data'),
         Output("toast-container-ver", "children")
     ],
     [
@@ -1146,20 +1173,11 @@ def cb_vertable(row, verdata, projname):
 
     vername = verdata[row[0]]['versionName']
     projverurl = str(verdata[row[0]]['_meta.href'])
-    path = projverurl + "/components?limit=5000"
-    # print(url)
-    print('Getting components ...')
-    custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
-    resp = hub.execute_get(path, custom_headers=custom_headers)
-    if resp.status_code != 200:
-        print('component list response ' + str(resp.status_code))
+    df_comp_new = get_comps_data(projverurl)
+    if df_comp_new is None:
         toast = make_ver_toast('Unable to get components - check permissions')
         return '', '', True, "Components", True, '', True, '', True, '', vername, projverurl, \
-               None, None, toast
-
-    compdata = resp.json()
-    df_comp_new = pd.json_normalize(compdata, record_path=['items'])
-    print('Found ' + str(len(df_comp_new.index)) + ' Components')
+               None, toast
 
     # if len(df_comp_new.index) > 0:
     #     df_comp_new.loc[(df_comp_new.policyStatus == 'IN_VIOLATION'), 'policyStatus'] = '🚫️'
@@ -1167,7 +1185,7 @@ def cb_vertable(row, verdata, projname):
     #     df_comp_new.loc[(df_comp_new.ignored == True), 'ignored'] = '❗'
     #     df_comp_new.loc[(df_comp_new.ignored != True), 'ignored'] = 'Not Ignored'
 
-    df_vuln_new, vulndata = get_vulns_data(projverurl)
+    df_vuln_new = get_vulns_data(projverurl)
 
     snippetdata, snipcount = snippets.get_snippets_data(hub, projverurl)
 
@@ -1177,8 +1195,7 @@ def cb_vertable(row, verdata, projname):
         "Vulnerabilities (" + str(len(df_vuln_new.index)) + ")", \
         create_snippetstab(snippetdata, projname, vername), False, "Snippets (" + str(snipcount) + ")", \
         False, create_trendtab(projname, vername, '', ''), \
-        False, "SPDX_" + projname + '-' + vername + ".json", vername, projverurl, \
-        compdata, vulndata, ''
+        False, "SPDX_" + projname + '-' + vername + ".json", vername, projverurl, ''
 
 
 @app.callback(
@@ -1315,11 +1332,11 @@ def cb_snipactions(snip_selected_clicks, snip_all_clicks, action,
         State('compstable', 'derived_virtual_data'),
         State('compstable', 'derived_virtual_selected_rows'),
         State('projverurl', 'data'),
-        State('allcompdata', 'data'),
+        # State('allcompdata', 'data'),
     ]
 )
 def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
-                   origdata, vdata, selected_rows, projverurl, allcompdata):
+                   origdata, vdata, selected_rows, projverurl):
     global hub
 
     print("cb_compactions")
@@ -1340,7 +1357,6 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
     # if not resp.ok:
     #     raise dash.exceptions.PreventUpdate
     # allcomps = resp.json()['items']
-    allcomps = allcompdata['items']
 
     def comp_action(url, cdata):
         custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json',
@@ -1399,24 +1415,24 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
         compurl = thiscomp['componentVersion']
         #
         # Find component in allcomps list
-        compdata = next(comp for comp in allcomps if comp["componentVersion"] == compurl)
+        # compdata = next(comp for comp in allcomps if comp["componentVersion"] == compurl)
+        compdata = json.loads(thiscomp['json'])
 
-        if compdata is not None:
-            if action in compaction_dict.keys():
-                entry = compaction_dict[action]
-                foundrow = -1
-                for origrow, origcomp in enumerate(origdata):
-                    if origcomp['componentVersion'] == vdata[row]['componentVersion']:
-                        foundrow = origrow
-                        break
-                if foundrow >= 0:
-                    origdata[foundrow][entry['field']] = entry['display']
-                    confirmation = entry['confirmation']
-                    compdata[entry['field']] = entry['value']
+        if action in compaction_dict.keys():
+            entry = compaction_dict[action]
+            foundrow = -1
+            for origrow, origcomp in enumerate(origdata):
+                if origcomp['componentVersion'] == vdata[row]['componentVersion']:
+                    foundrow = origrow
+                    break
+            if foundrow >= 0:
+                origdata[foundrow][entry['field']] = entry['display']
+                confirmation = entry['confirmation']
+                compdata[entry['field']] = entry['value']
 
-                    thiscompurl = projverurl + '/' + '/'.join(compurl.split('/')[4:])
-                    if comp_action(thiscompurl, compdata):
-                        count += 1
+                thiscompurl = projverurl + '/' + '/'.join(compurl.split('/')[4:])
+                if comp_action(thiscompurl, compdata):
+                    count += 1
 
     toast = ''
     if count > 0:
@@ -1433,16 +1449,17 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
     [
         Input('button_vuln_selected', 'n_clicks'),
         Input('button_vuln_all', 'n_clicks'),
+        Input('button_vuln_reload', 'n_clicks'),
         State('sel_vuln_action', 'value'),
         State('vulnstable', 'data'),
         State('vulnstable', 'derived_virtual_data'),
         State('vulnstable', 'derived_virtual_selected_rows'),
-        # State('projverurl', 'data'),
+        State('projverurl', 'data'),
         # State('allvulndata', 'data'),
     ]
 )
-def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
-                   origdata, vdata, selected_rows):
+def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, reload, action,
+                   origdata, vdata, selected_rows, projverurl):
     global hub
 
     print("cb_vulnactions")
@@ -1452,13 +1469,15 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
         rows = selected_rows
     elif ctx_caller == 'button_vuln_all.n_clicks':
         rows = range(len(vdata))
+    elif ctx_caller == 'button_vuln_reload.n_clicks':
+        vulndf = get_vulns_data(projverurl)
+        return vulndf.to_dict('records'), make_vuln_toast('Reloaded vulnerabilities')
     else:
         raise dash.exceptions.PreventUpdate
 
     if len(rows) == 0 or action is None:
         raise dash.exceptions.PreventUpdate
 
-    print(allvulndata)
     # custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
     # res = hub.execute_get(projverurl + '/vulnerable-bom-components?limit=5000', custom_headers=custom_headers)
     # if res.status_code != 200:
@@ -1509,24 +1528,30 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
 
         # if vulndata is None or index == -1:
         #     error = True
-        vulndata = thisvuln['json']
+        vulndata = json.loads(thisvuln['json'])
         if action in vulnaction_dict.keys() and \
-                vulndata['vulnerabilityWithRemediation']['remediationStatus'] != action:
+                thisvuln['vulnerabilityWithRemediation.remediationStatus'] != action:
             entry = vulnaction_dict[action]
             # Find entry in original table
-            # foundrow = -1
-            # for origrow, origcomp in enumerate(origdata):
-            #     if (origcomp['_meta.href'] == vulnurl):
-            #         foundrow = origrow
-            #         break
+            foundrow = -1
+            for origrow, origcomp in enumerate(origdata):
+                if (origcomp['componentVersion'] == thisvuln['componentVersion']) and \
+                        (origcomp['vulnerabilityWithRemediation.vulnerabilityName'] ==
+                         thisvuln['vulnerabilityWithRemediation.vulnerabilityName']):
+                    foundrow = origrow
+                    break
 
-            origdata[index]['vulnerabilityWithRemediation.remediationStatus'] = action
-            vulndata['remediationStatus'] = action
-            vulndata['remediationComment'] = entry['comment']
-            confirmation = entry['confirmation']
-            if vuln_action(hub, vulndata):
-                print('Remediated vuln: ' + vulndata['vulnerabilityWithRemediation']['vulnerabilityName'])
-                count += 1
+            if foundrow >= 0:
+                vulndata['remediationStatus'] = action
+                vulndata['remediationComment'] = entry['comment']
+                origdata[foundrow]['vulnerabilityWithRemediation.remediationStatus'] = action
+                origdata[foundrow]['json'] = json.dumps(vulndata)
+                confirmation = entry['confirmation']
+                if vuln_action(hub, vulndata):
+                    print('Remediated vuln: ' + vulndata['vulnerabilityWithRemediation']['vulnerabilityName'])
+                    count += 1
+                else:
+                    error = True
             else:
                 error = True
 
@@ -1548,11 +1573,11 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, action,
     [
         Input('button_trend', 'n_clicks'),
         State('projverurl', 'data'),
-        State('projname', 'data'),
+        # State('projname', 'data'),
         State('vername', 'data'),
     ]
 )
-def cb_trend(button, purl, projname, vername):
+def cb_trend(button, purl, vername):
 
     if button is None:
         raise dash.exceptions.PreventUpdate

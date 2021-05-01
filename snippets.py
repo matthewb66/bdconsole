@@ -55,10 +55,20 @@ def get_snippets_data(hub, path):
                 else:
                     igstatus = "Not ignored"
                 snippetid = match['hashId']
-                matchedlines = match['sourceEndLines'][0] - match['sourceStartLines'][0]
-                filename = os.path.join(match['matchFilePath'], snippet_item['name'])
+                if 'sourceStartLines' in match.keys() and 'sourceEndLines' in match.keys():
+                    matchedlines = match['sourceEndLines'][0] - match['sourceStartLines'][0]
+                else:
+                    matchedlines = 0
+                if 'matchFilePath' in match.keys():
+                    filename = os.path.join(match['matchFilePath'], snippet_item['name'])
+                else:
+                    filename = ''
+                if 'coverage' in match.keys():
+                    coverage = match['matchCoverage']
+                else:
+                    coverage = ''
                 csv_data += "{},{},{},{},{},{},{},{},{}\n".\
-                    format(filename.replace(',', ' '), snippet_item['size'], blocknum, match['matchCoverage'],
+                    format(filename.replace(',', ' '), snippet_item['size'], blocknum, coverage,
                            matchedlines, igstatus, scanid, nodeid, snippetid)
                 blocknum += 1
                 count += 1
