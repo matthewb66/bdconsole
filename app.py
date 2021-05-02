@@ -9,85 +9,21 @@ import dash_html_components as html
 from dash.dependencies import Input, Output, State
 import pandas as pd
 import dash_auth
-import dash_table
 import subprocess
-import io
-from datetime import datetime
+from dash_extensions.snippets import send_file
 
 import snippets
 import trend
+import comps
+import vulns
+import vers
+import projs
+import actions
 
 from blackduck.HubRestApi import HubInstance
 
 hub = HubInstance()
 spdx_proc = None
-
-
-def get_project_data():
-    projs = hub.get_projects(5000)
-    df = pd.json_normalize(projs, record_path=['items'])
-
-    print('Found ' + str(len(df.index)) + ' projects')
-    return df
-
-
-def get_versions_data(proj):
-    res = hub.execute_get(proj + '/versions?limit=200')
-    if res.status_code != 200:
-        print('Get version components - return code ' + res.status_code)
-        return None
-    vers = res.json()
-    df = pd.json_normalize(vers, record_path=['items'])
-
-    print('Found ' + str(len(df.index)) + ' versions')
-    return df
-
-
-def get_comps_data(projverurl):
-    print('Getting components ...')
-    path = projverurl + "/components?limit=5000"
-
-    custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
-    resp = hub.execute_get(path, custom_headers=custom_headers)
-    if resp.status_code != 200:
-        print('component list response ' + str(resp.status_code))
-        return None
-
-    comps = resp.json()
-    df = pd.json_normalize(comps, record_path=['items'])
-    for index, comp in enumerate(comps['items']):
-        df.loc[index, 'json'] = json.dumps(comp)
-
-    print('Found ' + str(len(df.index)) + ' Components')
-    return df
-
-
-def get_vulns_data(projverurl):
-    print('Getting Vulnerabilities ...')
-    custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
-    res = hub.execute_get(projverurl + '/vulnerable-bom-components?limit=5000', custom_headers=custom_headers)
-    if res.status_code != 200:
-        print('Get vulnerabilities - return code ' + res.status_code)
-        return None
-    vulns = res.json()
-    df = pd.json_normalize(vulns, record_path=['items'])
-    for index, vuln in enumerate(vulns['items']):
-        df.loc[index, 'json'] = json.dumps(vuln)
-
-    df = df.drop_duplicates(subset=["componentVersion",  'vulnerabilityWithRemediation.vulnerabilityName'],
-                            keep="first", inplace=False)
-
-    if len(df.index) > 0:
-        df = df[df['ignored'] != True]
-        df['vulnerabilityWithRemediation.vulnerabilityPublishedDate'] = \
-            pd.DatetimeIndex(df['vulnerabilityWithRemediation.vulnerabilityPublishedDate']).strftime("%Y-%m-%d")
-        df['vulnerabilityWithRemediation.vulnerabilityUpdatedDate'] = \
-            pd.DatetimeIndex(df['vulnerabilityWithRemediation.vulnerabilityUpdatedDate']).strftime("%Y-%m-%d")
-        df['vulnerabilityWithRemediation.remediationUpdatedAt'] = \
-            pd.DatetimeIndex(df['vulnerabilityWithRemediation.remediationUpdatedAt']).strftime("%Y-%m-%d")
-
-    print('Found ' + str(len(df.index)) + ' vulnerabilities')
-    return df
 
 
 app = dash.Dash(external_stylesheets=[dbc.themes.COSMO])
@@ -109,9 +45,7 @@ app.auth = dash_auth.BasicAuth(
     VALID_USERNAME_PASSWORD_PAIRS
 )
 
-df_proj = get_project_data()
-df_proj.createdAt = pd.DatetimeIndex(df_proj.createdAt).strftime("%Y-%m-%d")
-df_proj.updatedAt = pd.DatetimeIndex(df_proj.updatedAt).strftime("%Y-%m-%d")
+df_proj = projs.get_project_data(hub)
 
 df_comp = pd.DataFrame(columns=[
     "componentName",
@@ -137,727 +71,6 @@ df_vuln = pd.DataFrame(columns=[
     "usages",
     "matchTypes",
 ])
-
-# df_ver = get_versions_data('https://poc39.blackduck.synopsys.com/api/projects/27babd58-2eca-482f-975e-55c14b54f876')
-
-col_data_proj = [
-    {"name": ['Project'], "id": "name"},
-    {"name": ['Description'], "id": "description"},
-    {"name": ['Tier'], "id": "projectTier"},
-    {"name": ['Created'], "id": "createdAt"},
-    {"name": ['Created By'], "id": "createdBy"},
-    {"name": ['Updated'], "id": "updatedAt"},
-    {"name": ['Updated By'], "id": "updatedBy"},
-    {"name": ['Custom Sig'], "id": "customSignatureEnabled"},
-    # {"name": ['Snippets'], "id": "snippetAdjustmentApplied"},
-    {"name": ['Lic Conflicts'], "id": "licenseConflictsEnabled"},
-]
-
-for col, dtype in df_proj.dtypes.items():
-    if dtype == 'bool':
-        df_proj[col] = df_proj[col].astype('str')
-
-projtable = dash_table.DataTable(
-    id='projtable',
-    columns=col_data_proj,
-    style_cell={
-        'overflow': 'hidden',
-        'textOverflow': 'ellipsis',
-        'maxWidth': 0
-    },
-    data=df_proj.to_dict('records'),
-    page_size=30, sort_action='native',
-    filter_action='native',
-    row_selectable="single",
-    cell_selectable=False,
-    style_header={'backgroundColor': 'rgb(30, 30, 30)', 'color': 'white'},
-    tooltip_data=[
-        {
-            column: {'value': str(value), 'type': 'markdown'}
-            for column, value in row.items()
-        } for row in df_proj.to_dict('records')
-    ],
-    tooltip_duration=None,
-    style_data_conditional=[
-        {
-            'if': {'column_id': 'name'},
-            'width': '20%'
-        },
-        {
-            'if': {
-                'filter_query': '{customSignatureEnabled} eq "True"',
-                'column_id': 'customSignatureEnabled'
-            },
-            'backgroundColor': 'black',
-            'color': 'white'
-        },
-        {
-            'if': {
-                'filter_query': '{licenseConflictsEnabled} eq "True"',
-                'column_id': 'licenseConflictsEnabled'
-            },
-            'backgroundColor': 'grey',
-            'color': 'white'
-        },
-    ],
-    sort_by=[{'column_id': 'name', 'direction': 'asc'}],
-    # merge_duplicate_headers=True
-)
-
-
-col_data_ver = [
-    {"name": ['Version'], "id": "versionName"},
-    {"name": ['Phase'], "id": "phase"},
-    {"name": ['Distribution'], "id": "distribution"},
-    {"name": ['Created'], "id": "createdAt"},
-    {"name": ['Created By'], "id": "createdBy"},
-    {"name": ['License'], "id": "license.licenseDisplay"},
-    # {"name": ['Updated By'], "id": "updatedBy"},
-    # {"name": ['Custom Sig'], "id": "customSignatureEnabled"},
-    # {"name": ['Snippets'], "id": "snippetAdjustmentApplied"},
-    # {"name": ['Lic Conflicts'], "id": "licenseConflictsEnabled"},
-]
-
-
-def create_vertable(verdata):
-    global col_data_ver
-
-    verdata.createdAt = pd.DatetimeIndex(verdata.createdAt).strftime("%Y-%m-%d")
-    return dash_table.DataTable(
-        id='vertable',
-        columns=col_data_ver,
-        style_cell={
-            'overflow': 'hidden',
-            'textOverflow': 'ellipsis',
-            'maxWidth': 0
-        },
-        data=verdata.to_dict('records'),
-        page_size=30, sort_action='native',
-        filter_action='native',
-        row_selectable="single",
-        cell_selectable=False,
-        style_header={'backgroundColor': 'rgb(30, 30, 30)', 'color': 'white'},
-        tooltip_data=[
-            {
-                column: {'value': str(value), 'type': 'markdown'}
-                for column, value in row.items()
-            } for row in verdata.to_dict('records')
-        ],
-        tooltip_duration=None,
-        style_data_conditional=[
-            {
-                'if': {'column_id': 'versionName'},
-                'width': '30%'
-            },
-            {
-                'if': {'column_id': 'phase'},
-                'width': '10%'
-            },
-            {
-                'if': {'column_id': 'distribution'},
-                'width': '10%'
-            },
-            {
-                'if': {'column_id': 'createdAt'},
-                'width': '10%'
-            },
-            {
-                'if': {'column_id': 'createdBy'},
-                'width': '10%'
-            },
-            {
-                'if': {'column_id': 'license.licenseDisplay'},
-                'width': '30%'
-            },
-        ],
-        sort_by=[{'column_id': 'versionName', 'direction': 'asc'}],
-        # merge_duplicate_headers=True
-    )
-
-
-col_data_comps = [
-    {"name": ['Component'], "id": "componentName"},
-    {"name": ['Version'], "id": "componentVersionName"},
-    {"name": ['Ignored'], "id": "ignored"},
-    # {"name": ['Ignored'], "id": "ignoreIcon"},
-    {"name": ['Reviewed'], "id": "reviewStatus"},
-    {"name": ['Policy Violation'], "id": "policyStatus"},
-    # {"name": ['Policy Status'], "id": "polIcon"},
-    {"name": ['Usage'], "id": "usages"},
-    {"name": ['Match Types'], "id": "matchTypes"},
-]
-
-
-def create_compstab(compdata, projname, vername):
-    global col_data_comps
-
-    for col, dtype in compdata.dtypes.items():
-        if dtype == 'bool':
-            compdata[col] = compdata[col].astype('str')
-
-    return [
-        dbc.Row(
-            dbc.Col(html.H2("Components")),
-        ),
-        dbc.Row(
-            [
-                dbc.Col(html.H5("Project: " + projname + " - Version: " + vername), width=8),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id="sel_comp_action",
-                        options=[
-                            {'label': 'Select Action ...', 'value': 'NOTHING'},
-                            {'label': 'Ignore', 'value': 'IGNORE'},
-                            {'label': 'Unignore', 'value': 'UNIGNORE'},
-                            {'label': 'Set Reviewed', 'value': 'REVIEW'},
-                            {'label': 'Set Unreviewed', 'value': 'UNREVIEW'},
-                            {'label': 'Usage - Source', 'value': 'USAGE_SOURCE'},
-                            {'label': 'Usage - Statically Linked', 'value': 'USAGE_STATIC'},
-                            {'label': 'Usage - Dynamically Linked', 'value': 'USAGE_DYNAMIC'},
-                            {'label': 'Usage - Separate Work', 'value': 'USAGE_SEPARATE'},
-                            {'label': 'Usage - Merely Aggregated', 'value': 'USAGE_AGGREGATED'},
-                            {'label': 'Usage - Implement Standard', 'value': 'USAGE_STANDARD'},
-                            {'label': 'Usage - Prerequisite', 'value': 'USAGE_PREREQUISITE'},
-                            {'label': 'Usage - Dev Tool/Excluded', 'value': 'USAGE_EXCLUDED'},
-                        ],
-                        multi=False,
-                        placeholder='Select Action ...'
-                    ), width=2,
-                    align='center',
-                ),
-                dbc.Col(dbc.Button("Selected", id="button_comp_selected",
-                                   className="mr-2", size='sm'), width=1),
-                dbc.Col(dbc.Button("All Filtered", id="button_comp_all",
-                                   className="mr-2", size='sm'), width=1),
-            ]
-        ),
-        dbc.Row(
-            dbc.Col(
-                dash_table.DataTable(
-                    id='compstable',
-                    columns=col_data_comps,
-                    style_cell={
-                        'overflow': 'hidden',
-                        'textOverflow': 'ellipsis',
-                        'maxWidth': 0
-                    },
-                    data=compdata.to_dict('records'),
-                    page_size=30, sort_action='native',
-                    filter_action='native',
-                    row_selectable="multi",
-                    cell_selectable=False,
-                    style_header={'backgroundColor': 'rgb(30, 30, 30)', 'color': 'white'},
-                    tooltip_data=[
-                        {
-                            column: {'value': str(value), 'type': 'markdown'}
-                            for column, value in row.items()
-                        } for row in compdata.to_dict('records')
-                    ],
-                    tooltip_duration=None,
-                    style_data_conditional=[
-                        {
-                            'if': {'column_id': 'componentName'},
-                            'width': '30%'
-                        },
-                        {
-                            'if': {'column_id': 'componentVersionName'},
-                            'width': '20%'
-                        },
-                        {
-                            'if': {'column_id': 'ignored'},
-                            'width': '10%'
-                        },
-                        {
-                            'if': {'column_id': 'reviewStatus'},
-                            'width': '10%'
-                        },
-                        {
-                            'if': {'column_id': 'policyStatus'},
-                            'width': '10%'
-                        },
-                        {
-                            'if': {'column_id': 'usages'},
-                            'width': '10%'
-                        },
-                        {
-                            'if': {'column_id': 'matchTypes'},
-                            'width': '10%'
-                        },
-                        {
-                            'if': {
-                                'filter_query': '{policyStatus} = "IN_VIOLATION"',
-                                'column_id': 'policyStatus'
-                            },
-                            'backgroundColor': 'maroon',
-                            'color': 'white'
-                        },
-                        {
-                            'if': {
-                                'filter_query': '{reviewStatus} = "REVIEWED"',
-                                'column_id': 'reviewStatus'
-                            },
-                            'backgroundColor': 'blue',
-                            'color': 'white'
-                        },
-                        {
-                            'if': {
-                                'filter_query': '{ignored} eq "True"',
-                                'column_id': 'ignored'
-                            },
-                            'backgroundColor': 'grey',
-                            'color': 'white'
-                        },
-                    ],
-                    sort_by=[{'column_id': 'componentName', 'direction': 'asc'},
-                             {'column_id': 'componentVersionName', 'direction': 'asc'}]
-                    # merge_duplicate_headers=True
-                ),
-                width=12
-            ),
-        ),
-    ]
-
-
-col_data_vulns = [
-    {"name": ['Component'], "id": "componentName"},
-    {"name": ['Version'], "id": "componentVersionName"},
-    {"name": ['Vulnerability'], "id": "vulnerabilityWithRemediation.vulnerabilityName"},
-    {"name": ['Related Vuln'], "id": "vulnerabilityWithRemediation.relatedVulnerability"},
-    {"name": ['Description'], "id": "vulnerabilityWithRemediation.description"},
-    {"name": ['Published Date'], "id": "vulnerabilityWithRemediation.vulnerabilityPublishedDate"},
-    {"name": ['Updated Date'], "id": "vulnerabilityWithRemediation.vulnerabilityUpdatedDate"},
-    {"name": ['Overall Score'], "id": "vulnerabilityWithRemediation.overallScore"},
-    {"name": ['Exploit Score'], "id": "vulnerabilityWithRemediation.exploitabilitySubscore"},
-    {"name": ['Impact Score'], "id": "vulnerabilityWithRemediation.impactSubscore"},
-    {"name": ['Severity'], "id": "vulnerabilityWithRemediation.severity"},
-    {"name": ['Rem Status'], "id": "vulnerabilityWithRemediation.remediationStatus"},
-    {"name": ['Rem Date'], "id": "vulnerabilityWithRemediation.remediationUpdatedAt"},
-    {"name": ['CWE'], "id": "vulnerabilityWithRemediation.cweId"},
-]
-
-# 'componentVersion', 'componentName', 'componentVersionName',
-#        'componentVersionOriginName', 'componentVersionOriginId', 'ignored',
-#        'license.type', 'license.licenses', 'license.licenseDisplay',
-#        'vulnerabilityWithRemediation.vulnerabilityName',
-#        'vulnerabilityWithRemediation.description',
-#        'vulnerabilityWithRemediation.vulnerabilityPublishedDate',
-#        'vulnerabilityWithRemediation.vulnerabilityUpdatedDate',
-#        'vulnerabilityWithRemediation.baseScore',
-#        'vulnerabilityWithRemediation.overallScore',
-#        'vulnerabilityWithRemediation.exploitabilitySubscore',
-#        'vulnerabilityWithRemediation.impactSubscore',
-#        'vulnerabilityWithRemediation.source',
-#        'vulnerabilityWithRemediation.severity',
-#        'vulnerabilityWithRemediation.remediationStatus',
-#        'vulnerabilityWithRemediation.cweId',
-#        'vulnerabilityWithRemediation.remediationCreatedAt',
-#        'vulnerabilityWithRemediation.remediationUpdatedAt',
-#        'vulnerabilityWithRemediation.remediationCreatedBy',
-#        'vulnerabilityWithRemediation.remediationUpdatedBy', '_meta.allow',
-#        '_meta.href', '_meta.links',
-#        'vulnerabilityWithRemediation.relatedVulnerability'
-
-
-def create_vulnstab(vulndata, projname, vername):
-    global col_data_vulns
-
-    return [
-        dbc.Row(
-            dbc.Col(html.H2("Vulnerabilities")),
-        ),
-        dbc.Row(
-            [
-                dbc.Col(html.H5("Project: " + projname + " - Version: " + vername), width=7),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id="sel_vuln_action",
-                        # DUPLICATE, IGNORED, MITIGATED, NEEDS_REVIEW, NEW, PATCHED, REMEDIATION_COMPLETE,
-                        # REMEDIATION_COMPLETE
-                        options=[
-                            {'label': 'Select Remediation ...', 'value': 'NOTHING'},
-                            {'label': 'New', 'value': 'NEW'},
-                            {'label': 'Duplicate', 'value': 'DUPLICATE'},
-                            {'label': 'Ignored', 'value': 'IGNORED'},
-                            {'label': 'Mitigated', 'value': 'MITIGATED'},
-                            {'label': 'Needs Review', 'value': 'NEEDS_REVIEW'},
-                            {'label': 'Patched', 'value': 'PATCHED'},
-                            {'label': 'Remediation Required', 'value': 'REMEDIATION_REQUIRED'},
-                            {'label': 'Remediation Complete', 'value': 'REMEDIATION_COMPLETE'},
-                        ],
-                        multi=False,
-                        placeholder='Select Remediation ...'
-                    ), width=2,
-                    align='center',
-                ),
-                dbc.Col(dbc.Button("Selected", id="button_vuln_selected",
-                                   className="mr-2", size='sm'), width=1),
-                dbc.Col(dbc.Button("All Filtered", id="button_vuln_all",
-                                   className="mr-2", size='sm'), width=1),
-                dbc.Col(dbc.Button("Reload", id="button_vuln_reload",
-                                   className="mr-2", size='sm'), width=1),
-            ]
-        ),
-        dbc.Row(
-            dbc.Col(
-                dash_table.DataTable(
-                    id='vulnstable',
-                    columns=col_data_vulns,
-                    style_cell={
-                        'overflow': 'hidden',
-                        'textOverflow': 'ellipsis',
-                        'maxWidth': 0
-                    },
-                    data=vulndata.to_dict('records'),
-                    page_size=30, sort_action='native',
-                    filter_action='native',
-                    row_selectable="multi",
-                    cell_selectable=False,
-                    style_header={'backgroundColor': 'rgb(30, 30, 30)', 'color': 'white'},
-                    tooltip_data=[
-                        {
-                            column: {'value': str(value), 'type': 'markdown'}
-                            for column, value in row.items()
-                        } for row in vulndata.to_dict('records')
-                    ],
-                    tooltip_duration=None,
-                    style_data_conditional=[
-                        {
-                            'if': {
-                                'filter_query': '{ignored} eq "True"',
-                                'column_id': 'ignored'
-                            },
-                            'display': 'none',
-                        },
-                        {
-                            'if': {'column_id': 'componentName'},
-                            'width': '15%'
-                        },
-                        {
-                            'if': {'column_id': 'componentVersionName'},
-                            'width': '5%'
-                        },
-                        {
-                            'if': {'column_id': 'vulnerabilityWithRemediation.vulnerabilityName'},
-                            'width': '10%'
-                        },
-                        {
-                            'if': {'column_id': 'vulnerabilityWithRemediation.relatedVulnerability'},
-                            'width': '5%'
-                        },
-                        {
-                            'if': {'column_id': 'vulnerabilityWithRemediation.description'},
-                            'width': '15%'
-                        },
-                        {
-                            'if': {'column_id': 'vulnerabilityWithRemediation.vulnerabilityPublishedDate'},
-                            'width': '8%'
-                        },
-                        {
-                            'if': {'column_id': 'vulnerabilityWithRemediation.vulnerabilityUpdatedDate'},
-                            'width': '8%'
-                        },
-                        {
-                            'if': {'column_id': 'vulnerabilityWithRemediation.overallScore'},
-                            'width': '5%'
-                        },
-                        {
-                            'if': {'column_id': 'vulnerabilityWithRemediation.exploitabilitySubscore'},
-                            'width': '5%'
-                        },
-                        {
-                            'if': {'column_id': 'vulnerabilityWithRemediation.impactSubscore'},
-                            'width': '5%'
-                        },
-                        {
-                            'if': {'column_id': 'vulnerabilityWithRemediation.severity'},
-                            'width': '5%'
-                        },
-                        {
-                            'if': {'column_id': 'vulnerabilityWithRemediation.remediationStatus'},
-                            'width': '5%'
-                        },
-                        {
-                            'if': {'column_id': 'vulnerabilityWithRemediation.remediationUpdatedAt'},
-                            'width': '5%'
-                        },
-                        {
-                            'if': {'column_id': 'vulnerabilityWithRemediation.cweId'},
-                            'width': '5%'
-                        },
-                        {
-                            'if': {
-                                'filter_query': '{vulnerabilityWithRemediation.severity} = "CRITICAL"',
-                                'column_id': 'vulnerabilityWithRemediation.severity'
-                            },
-                            'backgroundColor': 'maroon',
-                            'color': 'white'
-                        },
-                        {
-                            'if': {
-                                'filter_query': '{vulnerabilityWithRemediation.severity} = "HIGH"',
-                                'column_id': 'vulnerabilityWithRemediation.severity'
-                            },
-                            'backgroundColor': 'crimson',
-                            'color': 'black'
-                        },
-                        {
-                            'if': {
-                                'filter_query': '{vulnerabilityWithRemediation.severity} = "MEDIUM"',
-                                'column_id': 'vulnerabilityWithRemediation.severity'
-                            },
-                            'backgroundColor': 'coral',
-                            'color': 'black'
-                        },
-                        {
-                            'if': {
-                                'filter_query': '{vulnerabilityWithRemediation.severity} = "LOW"',
-                                'column_id': 'vulnerabilityWithRemediation.severity'
-                            },
-                            'backgroundColor': 'gold',
-                            'color': 'black'
-                        },
-                        {
-                            'if': {
-                                'filter_query': '{vulnerabilityWithRemediation.remediationStatus} = "IGNORED"',
-                                'column_id': 'vulnerabilityWithRemediation.remediationStatus'
-                            },
-                            'backgroundColor': 'grey',
-                            'color': 'white'
-                        },
-                        {
-                            'if': {
-                                'filter_query': '{vulnerabilityWithRemediation.remediationStatus} = "PATCHED"',
-                                'column_id': 'vulnerabilityWithRemediation.remediationStatus'
-                            },
-                            'backgroundColor': 'grey',
-                            'color': 'white'
-                        },
-                        {
-                            'if': {
-                                'filter_query': '{vulnerabilityWithRemediation.remediationStatus} = "MITIGATED"',
-                                'column_id': 'vulnerabilityWithRemediation.remediationStatus'
-                            },
-                            'backgroundColor': 'grey',
-                            'color': 'white'
-                        },
-                        {
-                            'if': {
-                                'filter_query': '{vulnerabilityWithRemediation.remediationStatus} = "DUPLICATE"',
-                                'column_id': 'vulnerabilityWithRemediation.remediationStatus'
-                            },
-                            'backgroundColor': 'grey',
-                            'color': 'white'
-                        },
-                        {
-                            'if': {
-                                'filter_query':
-                                    '{vulnerabilityWithRemediation.remediationStatus} = "REMEDIATION_COMPLETE"',
-                                'column_id': 'vulnerabilityWithRemediation.remediationStatus'
-                            },
-                            'backgroundColor': 'grey',
-                            'color': 'white'
-                        },
-                    ],
-                    sort_by=[{'column_id': 'vulnerabilityWithRemediation.overallScore', 'direction': 'desc'}],
-                    # merge_duplicate_headers=True
-                ),
-                width=12
-            ),
-        ),
-    ]
-
-
-col_data_snippets = [
-    {"name": ['File'], "id": "file"},
-    {"name": ['Size (bytes)'], "id": "size"},
-    {"name": ['Block'], "id": "block"},
-    {"name": ['Match %'], "id": "coveragepct"},
-    {"name": ['Matched Lines'], "id": "matchlines"},
-    {"name": ['Status'], "id": "status"},
-    {"name": ['Scanid'], "id": "scanid"},
-    {"name": ['Nodeid'], "id": "nodeid"},
-    {"name": ['Snipid'], "id": "snippetid"},
-]
-
-
-def create_snippetstab(snippetcsv, projname, vername):
-    global col_data_snippets
-
-    if snippetcsv == '':
-        df_snippets = pd.DataFrame(columns=["file", "size", "block", "coveragepct", "matchlines", "status"])
-    else:
-        snipdata = io.StringIO(snippetcsv)
-        df_snippets = pd.read_csv(snipdata, sep=",")
-
-    return dbc.Row(
-        dbc.Col(
-            [
-                dbc.Row(
-                        dbc.Col(html.H2("Unconfirmed Snippets"), width=12),
-                ),
-                dbc.Row(
-                    [
-                        dbc.Col(html.H5("Project: " + projname + " - Version: " + vername), width=8),
-                        dbc.Col(
-                            dcc.Dropdown(
-                                id="sel_snip_action",
-                                options=[
-                                    {'label': 'Select Action ...', 'value': 'NOTHING'},
-                                    {'label': 'Ignore', 'value': 'IGNORE'},
-                                    {'label': 'Unignore', 'value': 'UNIGNORE'},
-                                    # {'label': 'Confirm', 'value': 'CONFIRM'},
-                                    # {'label': 'Unconfirm', 'value': 'UNCONFIRM'},
-                                ],
-                                multi=False,
-                                placeholder='Select Action ...'
-                            ), width=2,
-                            align='center',
-                        ),
-                        dbc.Col(dbc.Button("Selected", id="button_snip_selected",
-                                           className="mr-2", size='sm'), width=1),
-                        dbc.Col(dbc.Button("All Filtered", id="button_snip_all",
-                                           className="mr-2", size='sm'), width=1),
-                    ]
-                ),
-                dbc.Row(
-                    dbc.Col(
-                        dash_table.DataTable(
-                            id='sniptable',
-                            columns=col_data_snippets,
-                            style_cell={
-                                'overflow': 'hidden',
-                                'textOverflow': 'ellipsis',
-                                'maxWidth': 0
-                            },
-                            data=df_snippets.to_dict('records'),
-                            page_size=30, sort_action='native',
-                            filter_action='native',
-                            row_selectable="multi",
-                            cell_selectable=False,
-                            hidden_columns=["scanid", "nodeid", "snippetid"],
-                            style_header={'backgroundColor': 'rgb(30, 30, 30)', 'color': 'white'},
-                            tooltip_data=[
-                                {
-                                    column: {'value': str(value), 'type': 'markdown'}
-                                    for column, value in row.items()
-                                } for row in df_snippets.to_dict('records')
-                            ],
-                            tooltip_duration=None,
-                            css=[{"selector": ".show-hide", "rule": "display: none"}],
-                            style_data_conditional=[
-                                {
-                                    'if': {'column_id': 'file'},
-                                    'width': '60%'
-                                },
-                                {
-                                    'if': {'column_id': 'size'},
-                                    'width': '8%'
-                                },
-                                {
-                                    'if': {'column_id': 'block'},
-                                    'width': '8%'
-                                },
-                                {
-                                    'if': {'column_id': 'coveragepct'},
-                                    'width': '8%'
-                                },
-                                {
-                                    'if': {'column_id': 'matchlines'},
-                                    'width': '8%'
-                                },
-                                {
-                                    'if': {'column_id': 'status'},
-                                    'width': '8%'
-                                },
-                                {
-                                    'if': {
-                                        'filter_query':
-                                            '{status} = "Ignored"',
-                                        'column_id': 'status'
-                                    },
-                                    'backgroundColor': 'grey',
-                                    'color': 'white'
-                                },
-                            ],
-                            sort_by=[{'column_id': 'file', 'direction': 'asc'}]
-                            # merge_duplicate_headers=True
-                        ),
-                        width=12,
-                    ),
-                ),
-            ],
-            width=12
-        )
-    )
-
-
-def create_vercard(ver, comps, vername, projname):
-    table_body = []
-    projlink = ''
-    if ver is not None and comps is not None:
-        # verbutton = dbc.Button("Select Version", id="verbutton", className="mr-2", size='sm')
-        table_rows = [
-            html.Tr([html.Td("Component Count:"), html.Td(len(comps.index))]),
-            html.Tr([html.Td("Phase:"), html.Td(ver['phase'])]),
-            html.Tr([html.Td("Distribution:"), html.Td(ver['distribution'])]),
-            html.Tr([html.Td("License:"), html.Td(ver['license.licenseDisplay'])]),
-            html.Tr([html.Td("Owner:"), html.Td(ver['createdBy'])]),
-            html.Tr([html.Td("Create Date:"),
-                     html.Td(datetime.strptime(ver['createdAt'], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%Y-%m-%d %H:%M"))]),
-            html.Tr([html.Td("Last Update Date:"),
-                    html.Td(datetime.strptime(ver['settingUpdatedAt'],
-                                              '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%Y-%m-%d %H:%M"))]),
-        ]
-        table_body = [html.Tbody(table_rows)]
-        projlink = ver['_meta.href'] + '/components'
-
-    table_header = []
-
-    return dbc.Card(
-        [
-            dbc.CardHeader("Project: " + projname, style={'classname': 'card-title'}),
-            dbc.CardBody(
-                [
-                    html.H6("Project Version: " + vername, style={'display': 'flex', 'classname': 'card-title'}),
-                    html.Br(),
-                    dbc.Table(table_header + table_body, bordered=True),
-                ],
-            ),
-            dbc.CardFooter(dbc.CardLink('Project Version link', href=projlink)),
-            # dbc.Table(table_header + table_body, bordered=True),
-            # projusedbytitle, projstable,
-            # html.Div(verbutton),
-        ], id="vercard",
-        # style={"width": "28rem", "height":  "50rem"},
-        # style={"width": "23rem"},
-    )
-
-
-def create_trendtab(projname, vername, graph1, graph2):
-    return dbc.Row(
-        dbc.Col(
-            [
-                dbc.Row(
-                    dbc.Col(
-                        [
-                            html.H4('Project :' + projname + ' - Version: ' + vername),
-                            dbc.Button("Create Trend", id="button_trend",
-                                       className="mr-2", size='sm'),
-                        ],
-                        width=12
-                    ),
-                ),
-                dbc.Row(
-                    dbc.Col(
-                        [
-                            html.Div(children=[graph1], id='compgraph'),
-                            html.Div(children=[graph2], id='vulngraph'),
-                        ], width=12
-                    )
-                ),
-            ],
-        ),
-    ),
 
 
 app.layout = dbc.Container(
@@ -901,134 +114,36 @@ app.layout = dbc.Container(
                     dbc.Tabs(
                         [
                             dbc.Tab(  # PROJECTS TAB
-                                dbc.Row(
-                                    [
-                                        dbc.Col(
-                                            [
-                                                dbc.Row(
-                                                    dbc.Col([html.H2("Projects"), projtable], width=12)
-                                                ),
-                                            ], width=7
-                                        ),
-                                        dbc.Col(
-                                            [
-                                                dbc.Row(
-                                                    dbc.Col(
-                                                        [
-                                                            html.H2("Project Versions"),
-                                                            create_vertable(df_ver),
-                                                            html.Br()
-                                                        ], width=12
-                                                    )
-                                                ),
-                                                dbc.Row(
-                                                    dbc.Col(create_vercard(None, None, '', ''))
-                                                ),
-                                            ], width=5
-                                        ),
-                                    ]
-                                ),
+                                projs.create_projtab(df_proj, df_ver),
                                 label="Projects (" + str(len(df_proj)) + ")",
                                 tab_id="tab_projects", id="tab_projects"
                             ),
                             dbc.Tab(  # COMPONENTS TAB
-                                create_compstab(df_comp, '', ''),
+                                comps.create_compstab(df_comp, '', ''),
                                 label="Components",
                                 tab_id="tab_comps", id="tab_comps",
                                 disabled=True,
                             ),
                             dbc.Tab(  # VULNS TAB
-                                create_vulnstab(df_vuln, '', ''),
+                                vulns.create_vulnstab(df_vuln, '', ''),
                                 label="Vulnerabilities",
                                 tab_id="tab_vulns", id="tab_vulns",
                                 disabled=True,
                             ),
                             dbc.Tab(  # SNIPPETS TAB
-                                create_snippetstab('', '', ''),
+                                snippets.create_snippetstab('', '', ''),
                                 label="Snippets",
                                 tab_id="tab_snippets", id="tab_snippets",
                                 disabled=True,
                             ),
                             dbc.Tab(  # TREND TAB
-                                dbc.Row(
-                                    dbc.Col(
-                                        [
-                                            dbc.Row(
-                                                [
-                                                    dbc.Col(
-                                                        html.H4('Project : N/A - Version: N/A'),
-                                                        width=10
-                                                    ),
-                                                    dbc.Col(
-                                                        dbc.Button("Create Trend", id="button_trend",
-                                                                   className="mr-2", size='sm'),
-                                                        width=2
-                                                    ),
-                                                ],
-                                            ),
-                                            dbc.Row(
-                                                dbc.Col(
-                                                    [
-                                                        html.Div(children=[''], id='compgraph'),
-                                                        html.Div(children=[''], id='vulngraph'),
-                                                    ], width=12
-                                                )
-                                            ),
-                                        ],
-                                    ),
-                                ),
+                                trend.create_trendtab('', '', '', ''),
                                 label="Project Version Trend",
                                 tab_id="tab_trend", id="tab_trend",
                                 disabled=True,
                             ),
                             dbc.Tab(  # ACTIONS TAB
-                                dbc.Row(
-                                    dbc.Col(
-                                        [
-                                            html.H2("Export SPDX JSON file"),
-                                            dcc.Interval(
-                                                id='spdx_interval',
-                                                disabled=True,
-                                                interval=1 * 6000,  # in milliseconds
-                                                n_intervals=0,
-                                                max_intervals=400
-                                            ),
-                                            dbc.Form(
-                                                [
-                                                    dbc.FormGroup(
-                                                        [
-                                                            dbc.Label("Filename", className="mr-2"),
-                                                            dbc.Input(type="text",
-                                                                      id="spdx_file",
-                                                                      placeholder="Enter output SPDX file"),
-                                                        ],
-                                                        className="mr-3",
-                                                    ),
-                                                    dbc.FormGroup(
-                                                        [
-                                                            dbc.Checklist(
-                                                                id="spdx_recursive",
-                                                                options=[
-                                                                    {"label": "Recursive (Projects in Projects)",
-                                                                     "value": 1},
-                                                                ],
-                                                                value=[],
-                                                                switch=True,
-                                                            )
-                                                        ],
-                                                        className="mr-3",
-                                                    ),
-                                                    dbc.Button("Export SPDX",
-                                                               id="spdx_export_button",
-                                                               color="primary"),
-                                                ],
-                                                # inline=True,
-                                            ),
-                                            html.Div('', id='spdx_status'),
-                                        ],
-                                        width=4,
-                                    )
-                                ),
+                                actions.create_actions_tab(),
                                 label="Actions",
                                 tab_id="tab_actions", id="tab_actions",
                                 disabled=True,
@@ -1045,70 +160,6 @@ app.layout = dbc.Container(
 )
 
 
-def make_snip_toast(message):
-    """
-    Helper function for making a toast. dict id for use in pattern matching
-    callbacks.
-    """
-    return dbc.Toast(
-        message,
-        id={"type": "toast", "id": 'toast_snip'},
-        key='toast_snip',
-        header="Snippet Processing",
-        is_open=True,
-        dismissable=True,
-        icon="info",
-    )
-
-
-def make_ver_toast(message):
-    """
-    Helper function for making a toast. dict id for use in pattern matching
-    callbacks.
-    """
-    return dbc.Toast(
-        message,
-        id={"type": "toast", "id": 'toast_ver'},
-        key='toast_ver',
-        header="Version Components",
-        is_open=True,
-        dismissable=True,
-        icon="info",
-    )
-
-
-def make_comp_toast(message):
-    """
-    Helper function for making a toast. dict id for use in pattern matching
-    callbacks.
-    """
-    return dbc.Toast(
-        message,
-        id={"type": "toast", "id": "toast_comp"},
-        key='toast_comp',
-        header="Component Processing",
-        is_open=True,
-        dismissable=True,
-        icon="info",
-    )
-
-
-def make_vuln_toast(message):
-    """
-    Helper function for making a toast. dict id for use in pattern matching
-    callbacks.
-    """
-    return dbc.Toast(
-        message,
-        id={"type": "toast", "id": "toast_vuln"},
-        key='toast_vuln',
-        header="Vulnerability Processing",
-        is_open=True,
-        dismissable=True,
-        icon="info",
-    )
-
-
 @app.callback(
     [
         Output("vertable", "data"),
@@ -1123,6 +174,7 @@ def make_vuln_toast(message):
     ]
 )
 def cb_projtable(row, vprojdata):
+    global hub
 
     if row is None:
         raise dash.exceptions.PreventUpdate
@@ -1131,7 +183,7 @@ def cb_projtable(row, vprojdata):
 
     projid = vprojdata[row[0]]['_meta.href']
     projname = vprojdata[row[0]]['name']
-    verdata = get_versions_data(projid)
+    verdata = vers.get_versions_data(hub, projid)
 
     return verdata.to_dict(orient='records'), [], projname
 
@@ -1156,7 +208,7 @@ def cb_projtable(row, vprojdata):
         Output('projverurl', 'data'),
         # Output('allcompdata', 'data'),
         # Output('allvulndata', 'data'),
-        Output("toast-container-ver", "children")
+        Output("toast-container-ver", "children"),
     ],
     [
         # Input("projtable", "selected_rows"),
@@ -1167,35 +219,12 @@ def cb_projtable(row, vprojdata):
     ]
 )
 def cb_vertable(row, verdata, projname):
+    global hub
 
     if row is None or len(row) < 1:
         raise dash.exceptions.PreventUpdate
 
-    vername = verdata[row[0]]['versionName']
-    projverurl = str(verdata[row[0]]['_meta.href'])
-    df_comp_new = get_comps_data(projverurl)
-    if df_comp_new is None:
-        toast = make_ver_toast('Unable to get components - check permissions')
-        return '', '', True, "Components", True, '', True, '', True, '', vername, projverurl, \
-               None, toast
-
-    # if len(df_comp_new.index) > 0:
-    #     df_comp_new.loc[(df_comp_new.policyStatus == 'IN_VIOLATION'), 'policyStatus'] = '🚫️'
-    #     df_comp_new.loc[(df_comp_new.policyStatus == 'NOT_IN_VIOLATION'), 'policyStatus'] = 'None'
-    #     df_comp_new.loc[(df_comp_new.ignored == True), 'ignored'] = '❗'
-    #     df_comp_new.loc[(df_comp_new.ignored != True), 'ignored'] = 'Not Ignored'
-
-    df_vuln_new = get_vulns_data(projverurl)
-
-    snippetdata, snipcount = snippets.get_snippets_data(hub, projverurl)
-
-    return create_vercard(verdata[row[0]], df_comp_new, vername, projname), \
-        create_compstab(df_comp_new, projname, vername), False, "Components (" + str(len(df_comp_new.index)) + ")", \
-        create_vulnstab(df_vuln_new, projname, vername), False, \
-        "Vulnerabilities (" + str(len(df_vuln_new.index)) + ")", \
-        create_snippetstab(snippetdata, projname, vername), False, "Snippets (" + str(snipcount) + ")", \
-        False, create_trendtab(projname, vername, '', ''), \
-        False, "SPDX_" + projname + '-' + vername + ".json", vername, projverurl, ''
+    return vers.vertable(hub, row, verdata, projname)
 
 
 @app.callback(
@@ -1203,9 +232,10 @@ def cb_vertable(row, verdata, projname):
         Output('spdx_status', 'children'),
         Output('spdx_interval', 'disabled'),
         Output('spdx_interval', 'n_intervals'),
+        Output('spdx_collapse', 'is_open'),
     ],
     [
-        Input('spdx_export_button', 'n_clicks'),
+        Input('buttons_export_spdx', 'n_clicks'),
         Input('spdx_interval', 'n_intervals'),
         State('spdx_file', 'value'),
         State('spdx_recursive', 'value'),
@@ -1227,15 +257,15 @@ def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername):
         if len(spdx_rec) > 0 and spdx_rec[0] == 1:
             cmd.append('--recursive')
         spdx_proc = subprocess.Popen(cmd, close_fds=True)
-        return 'Processing SPDX', False, n
+        return 'Processing SPDX', False, n, False
     else:
         print("Polling SPDX process")
         spdx_proc.poll()
         ret = spdx_proc.returncode
         if ret is not None:
-            return 'Export Complete', True, 0
+            return 'Export Complete', True, 0, True
         else:
-            return 'Processing SPDX', False, n
+            return 'Processing SPDX', False, n, False
 
 
 @app.callback(
@@ -1270,53 +300,7 @@ def cb_snipactions(snip_selected_clicks, snip_all_clicks, action,
     if len(rows) == 0:
         raise dash.exceptions.PreventUpdate
 
-    confirmation = ''
-    count = 0
-    for row in rows:
-
-        if action == 'IGNORE' and vdata[row]['status'] == 'Not ignored':
-            # Ignore it
-            index = 0
-            for origrow in origdata:
-                if origrow['snippetid'] == vdata[row]['snippetid']:
-                    break
-                index += 1
-
-            origdata[row]['status'] = 'Ignored'
-            vdata[row]['status'] = 'Ignored'
-            confirmation = 'Ignored'
-
-            if snippets.ignore_snippet_bom_entry(hub, projverurl, vdata[row]['scanid'], vdata[row]['nodeid'],
-                                                 vdata[row]['snippetid'], True):
-                print("{} Ignored".format(vdata[row]['file']))
-                count += 1
-            else:
-                print("Error")
-
-        elif action == 'UNIGNORE' and vdata[row]['status'] == 'Ignored':
-            # Unignore it
-            index = 0
-            for origrow in origdata:
-                if origrow['snippetid'] == vdata[row]['snippetid']:
-                    break
-                index += 1
-
-            origdata[row]['status'] = 'Not ignored'
-            vdata[row]['status'] = 'Not Ignored'
-            confirmation = 'Unignored'
-
-            if snippets.ignore_snippet_bom_entry(hub, projverurl, vdata[row]['scanid'], vdata[row]['nodeid'],
-                                                 vdata[row]['snippetid'], False):
-                print("{} UNignored".format(vdata[row]['file']))
-                count += 1
-            else:
-                print("Error")
-
-    toast = ''
-    if count > 0:
-        toast = make_snip_toast("{} Snippets {}".format(count, confirmation))
-
-    return origdata, toast
+    return snippets.snipactions(hub, action, origdata, vdata, rows, projverurl)
 
 
 @app.callback(
@@ -1352,93 +336,7 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
     if len(rows) == 0 or action is None:
         raise dash.exceptions.PreventUpdate
 
-    # custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
-    # resp = hub.execute_get(projverurl + '/components?limit=5000', custom_headers=custom_headers)
-    # if not resp.ok:
-    #     raise dash.exceptions.PreventUpdate
-    # allcomps = resp.json()['items']
-
-    def comp_action(url, cdata):
-        custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json',
-                          'Content-Type': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
-        putresp = hub.execute_put(url, cdata, custom_headers=custom_headers)
-        if not putresp.ok:
-            print('Error - cannot update component ' + url)
-            return False
-        else:
-            print('Processed component ' + cdata['componentName'])
-            return True
-
-    compaction_dict = {
-        'IGNORE':
-            {'field': 'ignored', 'value': True,
-             'confirmation': 'Ignored', 'display': 'True'},
-        'UNIGNORE':
-            {'field': 'ignored', 'value': False,
-             'confirmation': 'Unignored', 'display': 'False'},
-        'REVIEW':
-            {'field': 'reviewStatus', 'value': 'REVIEWED',
-             'confirmation': 'Set Reviewed', 'display': 'REVIEWED'},
-        'UNREVIEW':
-            {'field': 'reviewStatus', 'value': 'NOT_REVIEWED',
-             'confirmation': 'Set Unreviewed', 'display': 'NOT_REVIEWED'},
-        'USAGE_SOURCE':
-            {'field': 'usages', 'value': ['SOURCE_CODE'],
-             'confirmation': 'Usage Changed', 'display': 'SOURCE_CODE'},
-        'USAGE_STATIC':
-            {'field': 'usages', 'value': ['STATICALLY_LINKED'],
-             'confirmation': 'Usage Changed', 'display': 'STATICALLY_LINKED'},
-        'USAGE_DYNAMIC':
-            {'field': 'usages', 'value': ['DYNAMICALLY_LINKED'],
-             'confirmation': 'Usage Changed', 'display': 'DYNAMICALLY_LINKED'},
-        'USAGE_SEPARATE':
-            {'field': 'usages', 'value': ['SEPARATE_WORK'],
-             'confirmation': 'Usage Changed', 'display': 'SEPARATE_WORK'},
-        'USAGE_AGGREGATED':
-            {'field': 'usages', 'value': ['MERELY_AGGREGATED'],
-             'confirmation': 'Usage Changed', 'display': 'MERELY_AGGREGATED'},
-        'USAGE_STANDARD':
-            {'field': 'usages', 'value': ['IMPLEMENTATION_OF_STANDARD'],
-             'confirmation': 'Usage Changed', 'display': 'IMPLEMENTATION_OF_STANDARD'},
-        'USAGE_PREREQUISITE':
-            {'field': 'usages', 'value': ['PREREQUISITE'],
-             'confirmation': 'Usage Changed', 'display': 'PREREQUISITE'},
-        'USAGE_EXCLUDED':
-            {'field': 'usages', 'value': ['DEV_TOOL_EXCLUDED'],
-             'confirmation': 'Usage Changed', 'display': 'DEV_TOOL_EXCLUDED'},
-    }
-    
-    count = 0
-    confirmation = ''
-    for row in rows:
-        thiscomp = vdata[row]
-        compurl = thiscomp['componentVersion']
-        #
-        # Find component in allcomps list
-        # compdata = next(comp for comp in allcomps if comp["componentVersion"] == compurl)
-        compdata = json.loads(thiscomp['json'])
-
-        if action in compaction_dict.keys():
-            entry = compaction_dict[action]
-            foundrow = -1
-            for origrow, origcomp in enumerate(origdata):
-                if origcomp['componentVersion'] == vdata[row]['componentVersion']:
-                    foundrow = origrow
-                    break
-            if foundrow >= 0:
-                origdata[foundrow][entry['field']] = entry['display']
-                confirmation = entry['confirmation']
-                compdata[entry['field']] = entry['value']
-
-                thiscompurl = projverurl + '/' + '/'.join(compurl.split('/')[4:])
-                if comp_action(thiscompurl, compdata):
-                    count += 1
-
-    toast = ''
-    if count > 0:
-        toast = make_comp_toast("{} Components {}".format(count, confirmation))
-
-    return origdata, toast
+    return comps.compactions(hub, action, origdata, vdata, rows, projverurl)
 
 
 @app.callback(
@@ -1470,99 +368,15 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, reload, action,
     elif ctx_caller == 'button_vuln_all.n_clicks':
         rows = range(len(vdata))
     elif ctx_caller == 'button_vuln_reload.n_clicks':
-        vulndf = get_vulns_data(projverurl)
-        return vulndf.to_dict('records'), make_vuln_toast('Reloaded vulnerabilities')
+        vulndf = vulns.get_vulns_data(hub, projverurl)
+        return vulndf.to_dict('records'), vulns.make_vuln_toast('Reloaded vulnerabilities')
     else:
         raise dash.exceptions.PreventUpdate
 
     if len(rows) == 0 or action is None:
         raise dash.exceptions.PreventUpdate
 
-    # custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
-    # res = hub.execute_get(projverurl + '/vulnerable-bom-components?limit=5000', custom_headers=custom_headers)
-    # if res.status_code != 200:
-    #     print('Get vulnerabilities - return code ' + res.status_code)
-    #     return origdata, make_vuln_toast('Unable to update vulnerability')
-    # allvulns = res.json()['items']
-
-    def vuln_action(vhub, comp):
-        try:
-            # vuln_name = comp['vulnerabilityWithRemediation']['vulnerabilityName']
-            result = vhub.execute_put(comp['_meta']['href'], data=comp)
-            if result.status_code != 202:
-                return False
-
-        except Exception as e:
-            print("ERROR: Unable to update vulnerabilities via API\n" + str(e))
-            return False
-
-        return True
-
-    vulnaction_dict = {
-        'NEW': {'confirmation': 'Change to New', 'comment': 'Updated by bdconsole'},
-        'DUPLICATE': {'confirmation': 'changed to Duplicate', 'comment': 'Updated by bdconsole'},
-        'IGNORED': {'confirmation': 'changed to Ignored', 'comment': 'Updated by bdconsole'},
-        'MITIGATED': {'confirmation': 'changed to Mitigated', 'comment': 'Updated by bdconsole'},
-        'NEEDS_REVIEW': {'confirmation': 'changed to Needs Review', 'comment': 'Updated by bdconsole'},
-        'PATCHED': {'confirmation': 'changed to Patch', 'comment': 'Updated by bdconsole'},
-        'REMEDIATION_REQUIRED': {'confirmation': 'changed to Remediation Required', 'comment': 'Updated by bdconsole'},
-        'REMEDIATION_COMPLETE': {'confirmation': 'changed to Remediation Complete', 'comment': 'Updated by bdconsole'},
-    }
-
-    count = 0
-    confirmation = ''
-    error = False
-    for row in rows:
-        thisvuln = vdata[row]
-        # vulnurl = thisvuln['_meta.href']
-        #
-        # Find component in allcomps list
-        # vulndata = next(index, vuln for index, vuln in enumerate(allvulns) if vuln["_meta"]['href'] == vulnurl)
-        # index = -1
-        # vulndata = None
-        # for index, vuln in enumerate(allvulndata):
-        #     if vuln['_meta']['href'] == vulnurl:
-        #         vulndata = vuln
-        #         break
-        # print(index)
-
-        # if vulndata is None or index == -1:
-        #     error = True
-        vulndata = json.loads(thisvuln['json'])
-        if action in vulnaction_dict.keys() and \
-                thisvuln['vulnerabilityWithRemediation.remediationStatus'] != action:
-            entry = vulnaction_dict[action]
-            # Find entry in original table
-            foundrow = -1
-            for origrow, origcomp in enumerate(origdata):
-                if (origcomp['componentVersion'] == thisvuln['componentVersion']) and \
-                        (origcomp['vulnerabilityWithRemediation.vulnerabilityName'] ==
-                         thisvuln['vulnerabilityWithRemediation.vulnerabilityName']):
-                    foundrow = origrow
-                    break
-
-            if foundrow >= 0:
-                vulndata['remediationStatus'] = action
-                vulndata['remediationComment'] = entry['comment']
-                origdata[foundrow]['vulnerabilityWithRemediation.remediationStatus'] = action
-                origdata[foundrow]['json'] = json.dumps(vulndata)
-                confirmation = entry['confirmation']
-                if vuln_action(hub, vulndata):
-                    print('Remediated vuln: ' + vulndata['vulnerabilityWithRemediation']['vulnerabilityName'])
-                    count += 1
-                else:
-                    error = True
-            else:
-                error = True
-
-    if error:
-        return origdata, make_vuln_toast('Unable to update vulnerabilities')
-
-    toast = ''
-    if count > 0:
-        toast = make_vuln_toast("{} Components {}".format(count, confirmation))
-
-    return origdata, toast
+    return vulns.vulnactions(hub, action, origdata, vdata, rows)
 
 
 @app.callback(
@@ -1594,5 +408,22 @@ def cb_trend(button, purl, vername):
     return dcc.Graph(figure=compfig, id='fig_time_trend'), dcc.Graph(figure=vulnfig, id='fig_time_trend')
 
 
+@app.callback(
+    Output("download_spdx", "data"),
+    [
+        Input('button_download_spdx', 'n_clicks'),
+        State('spdx_file', 'value'),
+    ]
+)
+def cb_downloadspdx(button, spdxfile):
+
+    if button is None:
+        raise dash.exceptions.PreventUpdate
+
+    filepath = 'SPDX/' + spdxfile
+
+    return send_file(filepath)
+
+
 if __name__ == '__main__':
-    app.run_server(host='127.0.0.1', port=8888, debug=False)
+    app.run_server(host='127.0.0.1', port=8888, debug=True)

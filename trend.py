@@ -1,6 +1,8 @@
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
+import dash_bootstrap_components as dbc
+import dash_html_components as html
 
 
 def remove_vulns(vuln_comp_dict, component, vuln_list):
@@ -119,7 +121,6 @@ def proc_events(eventlist):
                                    'Patched Vulns': len(vuln_patched_list)})
             timelist_comps.append({'timestamp': event['timestamp'], 'Components': len(comp_dict),
                                    'Ignored Components': len(comp_ignored_list)})
-
 
     timelist_comps.append({'timestamp': now.strftime("%Y/%m/%d %H:%M:%S"), 'Components': len(comp_dict),
                            'Ignored Components': len(comp_ignored_list)})
@@ -308,6 +309,33 @@ def create_fig_compstimeline(compevents, scans):
         prevscan = scan
 
     return fig
+
+
+def create_trendtab(projname, vername, graph1, graph2):
+    return dbc.Row(
+        dbc.Col(
+            [
+                dbc.Row(
+                    dbc.Col(
+                        [
+                            html.H4('Project :' + projname + ' - Version: ' + vername),
+                            dbc.Button("Create Trend", id="button_trend",
+                                       className="mr-2", size='sm'),
+                        ],
+                        width=12
+                    ),
+                ),
+                dbc.Row(
+                    dbc.Col(
+                        [
+                            html.Div(children=[graph1], id='compgraph'),
+                            html.Div(children=[graph2], id='vulngraph'),
+                        ], width=12
+                    )
+                ),
+            ],
+        ),
+    ),
 
 
 def create_fig_vulnstimeline(vulnevents, scans):
