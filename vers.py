@@ -164,6 +164,7 @@ def vertable(hub, row, verdata, projname):
     snippetdata, snipcount = snippets.get_snippets_data(hub, projverurl)
 
     spdx_file = "SPDX_" + projname.replace(' ', '-') + '-' + vername.replace(' ', '-') + ".json"
+    spdxcardlabel = 'Project: ' + projname + ' - Version: ' + vername
 
     return create_vercard(verdata[row[0]], df_comp_new, vername, projname), \
         comps.create_compstab(df_comp_new, projname, vername), False, "Components (" + \
@@ -172,4 +173,4 @@ def vertable(hub, row, verdata, projname):
         "Vulnerabilities (" + str(len(df_vuln_new.index)) + ")", \
         snippets.create_snippetstab(snippetdata, projname, vername), False, "Snippets (" + str(snipcount) + ")", \
         False, trend.create_trendtab(projname, vername, '', ''), \
-        False, spdx_file, vername, projverurl, ''
+        False, spdxcardlabel, spdx_file, vername, projverurl, ''

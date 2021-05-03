@@ -143,7 +143,7 @@ app.layout = dbc.Container(
                                 disabled=True,
                             ),
                             dbc.Tab(  # ACTIONS TAB
-                                actions.create_actions_tab(),
+                                actions.create_actions_tab('', ''),
                                 label="Actions",
                                 tab_id="tab_actions", id="tab_actions",
                                 disabled=True,
@@ -203,6 +203,7 @@ def cb_projtable(row, vprojdata):
         Output("tab_trend", "disabled"),
         Output("tab_trend", "children"),
         Output("tab_actions", "disabled"),
+        Output("spdxtitle", "children"),
         Output("spdx_file", "value"),
         Output('vername', 'data'),
         Output('projverurl', 'data'),
