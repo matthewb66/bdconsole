@@ -6,14 +6,16 @@ import pandas as pd
 import dash_table
 
 
-def get_vulns_data(hub, projverurl):
+def get_vulns_data(bd, projverurl):
     print('Getting Vulnerabilities ...')
-    custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
-    res = hub.execute_get(projverurl + '/vulnerable-bom-components?limit=5000', custom_headers=custom_headers)
-    if res.status_code != 200:
-        print('Get vulnerabilities - return code ' + res.status_code)
-        return None
-    vulns = res.json()
+    # custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
+    # res = hub.execute_get(projverurl + '/vulnerable-bom-components?limit=5000', custom_headers=custom_headers)
+    # if res.status_code != 200:
+    #     print('Get vulnerabilities - return code ' + res.status_code)
+    #     return None
+    # vulns = res.json()
+
+    vulns = bd.get_json(projverurl + '/vulnerable-bom-components?limit=5000')
     df = pd.json_normalize(vulns, record_path=['items'])
     for index, vuln in enumerate(vulns['items']):
         df.loc[index, 'json'] = json.dumps(vuln)
@@ -277,13 +279,16 @@ def make_vuln_toast(message):
     )
 
 
-def vulnactions(hub, action, origdata, vdata, rows):
+def vulnactions(bd, action, origdata, vdata, rows):
 
-    def do_vuln_action(vhub, comp):
+    def do_vuln_action(bbd, comp):
         try:
             # vuln_name = comp['vulnerabilityWithRemediation']['vulnerabilityName']
-            result = vhub.execute_put(comp['_meta']['href'], data=comp)
-            if result.status_code != 202:
+            # result = vhub.execute_put(comp['_meta']['href'], data=comp)
+            # if result.status_code != 202:
+            #     return False
+            r = bbd.session.put(comp['_meta']['href'], json=comp)
+            if r.status_code != 202:
                 return False
 
         except Exception as e:
@@ -328,7 +333,7 @@ def vulnactions(hub, action, origdata, vdata, rows):
                 origdata[foundrow]['vulnerabilityWithRemediation.remediationStatus'] = action
                 origdata[foundrow]['json'] = json.dumps(vulndata)
                 confirmation = entry['confirmation']
-                if do_vuln_action(hub, vulndata):
+                if do_vuln_action(bd, vulndata):
                     print('Remediated vuln: ' + vulndata['vulnerabilityWithRemediation']['vulnerabilityName'])
                     count += 1
                 else:

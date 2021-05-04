@@ -10,12 +10,12 @@ import comps
 import vulns
 
 
-def get_versions_data(hub, proj):
-    res = hub.execute_get(proj + '/versions?limit=200')
-    if res.status_code != 200:
-        print('Get version components - return code ' + res.status_code)
-        return None
-    vers = res.json()
+def get_versions_data(bd, projurl):
+    # res = hub.execute_get(proj + '/versions?limit=200')
+    # if res.status_code != 200:
+    #     print('Get version components - return code ' + res.status_code)
+    #     return None
+    vers = bd.get_json(projurl + "/versions?limit=200")
     df = pd.json_normalize(vers, record_path=['items'])
 
     print('Found ' + str(len(df.index)) + ' versions')
@@ -150,18 +150,18 @@ def make_ver_toast(message):
     )
 
 
-def vertable(hub, row, verdata, projname):
+def vertable(bd, row, verdata, projname):
     vername = verdata[row[0]]['versionName']
     projverurl = str(verdata[row[0]]['_meta.href'])
-    df_comp_new = comps.get_comps_data(hub, projverurl)
+    df_comp_new = comps.get_comps_data(bd, projverurl)
     if df_comp_new is None:
         toast = make_ver_toast('Unable to get components - check permissions')
         return '', '', True, "Components", True, '', True, '', True, '', vername, projverurl, \
                None, toast
 
-    df_vuln_new = vulns.get_vulns_data(hub, projverurl)
+    df_vuln_new = vulns.get_vulns_data(bd, projverurl)
 
-    snippetdata, snipcount = snippets.get_snippets_data(hub, projverurl)
+    snippetdata, snipcount = snippets.get_snippets_data(bd, projverurl)
 
     spdx_file = "SPDX_" + projname.replace(' ', '-') + '-' + vername.replace(' ', '-') + ".json"
     spdxcardlabel = 'Project: ' + projname + ' - Version: ' + vername

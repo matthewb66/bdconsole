@@ -6,17 +6,18 @@ import pandas as pd
 import dash_table
 
 
-def get_comps_data(hub, projverurl):
+def get_comps_data(bd, projverurl):
     print('Getting components ...')
-    path = projverurl + "/components?limit=5000"
-
-    custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
-    resp = hub.execute_get(path, custom_headers=custom_headers)
-    if resp.status_code != 200:
-        print('component list response ' + str(resp.status_code))
-        return None
-
-    comps = resp.json()
+    # path = projverurl + "/components?limit=5000"
+    #
+    # custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
+    # resp = hub.execute_get(path, custom_headers=custom_headers)
+    # if resp.status_code != 200:
+    #     print('component list response ' + str(resp.status_code))
+    #     return None
+    #
+    # comps = resp.json()
+    comps = bd.get_json(projverurl + "/components?limit=5000")
     df = pd.json_normalize(comps, record_path=['items'])
     for index, comp in enumerate(comps['items']):
         df.loc[index, 'json'] = json.dumps(comp)
@@ -184,18 +185,25 @@ def make_comp_toast(message):
     )
 
 
-def compactions(hub, action, origdata, vdata, rows, projverurl):
+def compactions(bd, action, origdata, vdata, rows, projverurl):
 
     def do_comp_action(url, cdata):
         custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json',
                           'Content-Type': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
-        putresp = hub.execute_put(url, cdata, custom_headers=custom_headers)
-        if not putresp.ok:
-            print('Error - cannot update component ' + url)
-            return False
-        else:
+        # putresp = hub.execute_put(url, cdata, custom_headers=custom_headers)
+        # if not putresp.ok:
+        #     print('Error - cannot update component ' + url)
+        #     return False
+        # else:
+        #     print('Processed component ' + cdata['componentName'])
+        #     return True
+        r = bd.session.put(url, json=cdata)
+        if r.status_code == 200:
             print('Processed component ' + cdata['componentName'])
             return True
+        else:
+            print('Error - cannot update component ' + url)
+            return False
 
     compaction_dict = {
         'IGNORE':

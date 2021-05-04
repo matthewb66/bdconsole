@@ -132,24 +132,26 @@ def create_snippetstab(snippetcsv, projname, vername):
     )
 
 
-def get_snippet_entries(hub, path):
+def get_snippet_entries(bd, path):
     paramstring = "?filter=bomMatchReviewStatus%3Anot_reviewed&filter=bomMatchType%3Asnippet&offset=0&limit=5000"
 
+    print(path)
     # Using internal API - see https://jira.dc1.lan/browse/HUB-18270: Make snippet API calls for ignoring,
     # confirming snippet matches public
     splits = path.split('/')
-    "{}/internal/projects/{}/versions/{}/source-bom-entries"
-    url = "{}/internal/projects/{}/versions/{}/source-bom-entries".format(hub.get_apibase(), splits[5], splits[7]) \
+    # "{}/internal/projects/{}/versions/{}/source-bom-entries"
+    url = "{}/api/internal/projects/{}/versions/{}/source-bom-entries".format('/'.join(splits[:3]), splits[5], splits[7]) \
           + paramstring
-    # print(url)
-    response = hub.execute_get(url)
-    if response.ok:
-        return response.json()
-    else:
-        return {}
+    print(url)
+    # response = hub.execute_get(url)
+    # if response.ok:
+    #     return response.json()
+    # else:
+    #     return {}
+    return bd.get_json(url)
 
 
-def ignore_snippet_bom_entry(hub, url, scanid, nodeid, snippetid, ignore):
+def ignore_snippet_bom_entry(bd, url, scanid, nodeid, snippetid, ignore):
     if ignore:
         post_body = '{ "ignored": true }'
     else:
@@ -158,17 +160,22 @@ def ignore_snippet_bom_entry(hub, url, scanid, nodeid, snippetid, ignore):
     fullurl = "{}/scans/{}/nodes/{}/snippets/{}".format(url, scanid, nodeid, snippetid)
     # 	print(url)
 
-    response = hub.execute_put(fullurl, post_body)
-    return response.ok
+    # response = hub.execute_put(fullurl, post_body)
+    # return response.ok
+    r = bd.session.put(fullurl, json=post_body)
+    if r.status_code == 200:
+        return True
+    else:
+        return False
 
 
-def get_snippets_data(hub, path):
+def get_snippets_data(bd, path):
     csv_data = "{},{},{},{},{},{},{},{},{}\n".format("file", "size", "block", "coveragepct", "matchlines",
                                                      "status", "scanid", "nodeid", "snippetid")
     alreadyignored = 0
     count = 0
     print('Getting snippet data ... ')
-    snippet_bom_entries = get_snippet_entries(hub, path)
+    snippet_bom_entries = get_snippet_entries(bd, path)
     if snippet_bom_entries != '':
         # print(snippet_bom_entries)
         for snippet_item in snippet_bom_entries['items']:
@@ -222,7 +229,7 @@ def make_snip_toast(message):
     )
 
 
-def snipactions(hub, action, origdata, vdata, rows, projverurl):
+def snipactions(bd, action, origdata, vdata, rows, projverurl):
     confirmation = ''
     count = 0
     for row in rows:
@@ -239,7 +246,7 @@ def snipactions(hub, action, origdata, vdata, rows, projverurl):
             vdata[row]['status'] = 'Ignored'
             confirmation = 'Ignored'
 
-            if ignore_snippet_bom_entry(hub, projverurl, vdata[row]['scanid'], vdata[row]['nodeid'],
+            if ignore_snippet_bom_entry(bd, projverurl, vdata[row]['scanid'], vdata[row]['nodeid'],
                                         vdata[row]['snippetid'], True):
                 print("{} Ignored".format(vdata[row]['file']))
                 count += 1
@@ -258,7 +265,7 @@ def snipactions(hub, action, origdata, vdata, rows, projverurl):
             vdata[row]['status'] = 'Not Ignored'
             confirmation = 'Unignored'
 
-            if ignore_snippet_bom_entry(hub, projverurl, vdata[row]['scanid'], vdata[row]['nodeid'],
+            if ignore_snippet_bom_entry(bd, projverurl, vdata[row]['scanid'], vdata[row]['nodeid'],
                                         vdata[row]['snippetid'], False):
                 print("{} UNignored".format(vdata[row]['file']))
                 count += 1

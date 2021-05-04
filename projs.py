@@ -6,8 +6,13 @@ import dash_table
 import vers
 
 
-def get_project_data(hub):
-    projs = hub.get_projects(5000)
+def get_project_data(bd):
+    # url = bd.list_resource('projects')
+    # vers = bd.get_json(url + "/versions?limit=200")
+    #
+    # projs = bd.get_resource('projects', items=False)
+    projs = bd.get_json("/api/projects?offset=0&limit=5000")
+
     df = pd.json_normalize(projs, record_path=['items'])
     df.createdAt = pd.DatetimeIndex(df.createdAt).strftime("%Y-%m-%d")
     df.updatedAt = pd.DatetimeIndex(df.updatedAt).strftime("%Y-%m-%d")

@@ -134,7 +134,7 @@ def proc_events(eventlist):
     return timelist_comps, timelist_vulns, scans
 
 
-def proc_journals(hub, projverurl, pjvername):
+def proc_journals(bd, projverurl, pjvername):
 
     # compeventaction_dict = {}
     # compeventtime_dict = {}
@@ -148,11 +148,12 @@ def proc_journals(hub, projverurl, pjvername):
 
     projjournalurl = "{}/api/journal/projects/{}".format('/'.join(arr[:3]), arr[5])
     verjournalurl = "{}/versions/{}?limit=50000".format(projjournalurl, arr[7])
-    response = hub.execute_get(verjournalurl, custom_headers=headers)
-
-    if not response.ok:
-        return None, None, None
-    jsondata = response.json()
+    # response = hub.execute_get(verjournalurl, custom_headers=headers)
+    #
+    # if not response.ok:
+    #     return None, None, None
+    # jsondata = response.json()
+    jsondata = bd.get_json(verjournalurl, headers=headers)
 
     # def addcompeevent(ceventaction_dict, ceventtime_dict, cname, ctime):
     #     if cname not in ceventaction_dict.keys():
@@ -240,36 +241,38 @@ def proc_journals(hub, projverurl, pjvername):
 
     arr = projverurl.split('/')
     projurl = "{}/api/projects/{}".format('/'.join(arr[:3]), arr[5])
-    response = hub.execute_get(projurl, custom_headers=headers)
-
-    if not response.ok:
-        return None, None
-    projconf = response.json()
+    # response = hub.execute_get(projurl, custom_headers=headers)
+    #
+    # if not response.ok:
+    #     return None, None
+    # projconf = response.json()
+    projconf = bd.get_json(projurl)
 
     if 'projectLevelAdjustments' in projconf and projconf['projectLevelAdjustments']:
         # Project version uses project level adjustments
 
-        headers = {'Accept': 'application/vnd.blackducksoftware.journal-4+json'}
+        # headers = {'Accept': 'application/vnd.blackducksoftware.journal-4+json'}
+        # response = hub.execute_get(projjournalurl + '?limit=50000', custom_headers=headers)
+        # if response.ok:
+        #     jsondata = response.json()
 
-        response = hub.execute_get(projjournalurl + '?limit=50000', custom_headers=headers)
-        if response.ok:
-            jsondata = response.json()
+        jsondata = bd.get_json(projjournalurl + '?limit=50000')
 
-            event_list = jsondata['items']
-            ver_create_date = ''
-            for event in event_list:
-                if event['objectData']['type'] == 'VERSION' and event['objectData']['name'] == pjvername:
-                    ver_create_date = event['timestamp']
+        event_list = jsondata['items']
+        ver_create_date = ''
+        for event in event_list:
+            if event['objectData']['type'] == 'VERSION' and event['objectData']['name'] == pjvername:
+                ver_create_date = event['timestamp']
 
-                if event['timestamp'] > ver_create_date and event['objectData']['type'] == 'COMPONENT' \
-                        and event['currentData']['adjustmentType'] == 'Ignore':
-                    if 'releaseVersion' in event['currentData']:
-                        compname = event['objectData']['name'] + "/" + event['currentData']['releaseVersion']
-                    else:
-                        compname = event['objectData']['name']
-                    events.append({'timestamp': event['timestamp'], 'type': 'IGNORED', 'comp': compname})
-                    # print('COMP_IGNORED')
-                # print(event['timestamp'] + ": ", event['currentData'])
+            if event['timestamp'] > ver_create_date and event['objectData']['type'] == 'COMPONENT' \
+                    and event['currentData']['adjustmentType'] == 'Ignore':
+                if 'releaseVersion' in event['currentData']:
+                    compname = event['objectData']['name'] + "/" + event['currentData']['releaseVersion']
+                else:
+                    compname = event['objectData']['name']
+                events.append({'timestamp': event['timestamp'], 'type': 'IGNORED', 'comp': compname})
+                # print('COMP_IGNORED')
+            # print(event['timestamp'] + ": ", event['currentData'])
 
     print()
 

@@ -1,6 +1,6 @@
 import json
 import sys
-import os
+# import os
 # from time import time
 import dash
 import dash_bootstrap_components as dbc
@@ -20,14 +20,25 @@ import vers
 import projs
 import actions
 
-from blackduck.HubRestApi import HubInstance
+from blackduck import Client
+import logging
+import os
 
-hub = HubInstance()
+# from blackduck.HubRestApi import HubInstance
+# hub = HubInstance()
+
+bd = None
+
 spdx_proc = None
 
+# from pprint import pprint
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] {%(module)s:%(lineno)d} %(levelname)s - %(message)s"
+)
 
 app = dash.Dash(external_stylesheets=[dbc.themes.COSMO])
-
 server = app.server
 
 if not os.path.isfile('conf/users.txt'):
@@ -45,7 +56,7 @@ app.auth = dash_auth.BasicAuth(
     VALID_USERNAME_PASSWORD_PAIRS
 )
 
-df_proj = projs.get_project_data(hub)
+df_proj = pd.DataFrame()
 
 df_comp = pd.DataFrame(columns=[
     "componentName",
@@ -80,6 +91,7 @@ app.layout = dbc.Container(
         dcc.Store(id='projname', storage_type='session'),
         dcc.Store(id='vername', storage_type='session'),
         dcc.Store(id='projverurl', storage_type='session'),
+
         # dcc.Store(id='allvulndata', storage_type='session'),
         # dcc.Store(id='allcompdata', storage_type='session'),
         dbc.NavbarSimple(
@@ -87,7 +99,7 @@ app.layout = dbc.Container(
                 dbc.NavItem(dbc.NavLink("Documentation", href="https://github.com/matthewb66/bdconsole")),
             ],
             brand="Black Duck Project Console",
-            brand_href=hub.get_apibase(),
+            # brand_href=hub.get_apibase(),
             color="primary",
             dark=True,
             fluid=True,
@@ -107,6 +119,42 @@ app.layout = dbc.Container(
         html.Div(
             id="toast-container-vuln",
             style={"position": "fixed", "top": 10, "right": 10, "width": 350},
+        ),
+        dbc.Row(
+            dbc.Col(
+                dbc.Collapse(
+                    [
+                        dbc.Form(
+                            [
+                                dbc.FormGroup(
+                                    [
+                                        dbc.Label("Server URL", className="mr-2"),
+                                        dbc.Input(type="text",
+                                                  id="config_server",
+                                                  placeholder="Enter server URL"),
+                                    ],
+                                    className="mr-3",
+                                ),
+                                dbc.FormGroup(
+                                    [
+                                        dbc.Label("API Token", className="mr-2"),
+                                        dbc.Input(type="text",
+                                                  id="config_apikey",
+                                                  placeholder="Enter API Token"),
+                                    ],
+                                    className="mr-3",
+                                ),
+                                dbc.Button("Connect to Server",
+                                           id="buttons_config_go",
+                                           color="primary"),
+                            ],
+                            # inline=True,
+                        ),
+                    ],
+                    id="config_collapse",
+                    is_open=True,
+                ),
+            ),
         ),
         dbc.Row(
             dbc.Col(
@@ -174,7 +222,12 @@ app.layout = dbc.Container(
     ]
 )
 def cb_projtable(row, vprojdata):
-    global hub
+    global df_proj
+    global bd
+
+    # if os.path.isfile('.restconfig.json') and bd is not None and (df_proj is None or len(df_proj.index) == 0):
+    if bd is not None and (df_proj is None or len(df_proj.index) == 0):
+            df_proj = projs.get_project_data(bd)
 
     if row is None:
         raise dash.exceptions.PreventUpdate
@@ -183,7 +236,7 @@ def cb_projtable(row, vprojdata):
 
     projid = vprojdata[row[0]]['_meta.href']
     projname = vprojdata[row[0]]['name']
-    verdata = vers.get_versions_data(hub, projid)
+    verdata = vers.get_versions_data(bd, projid)
 
     return verdata.to_dict(orient='records'), [], projname
 
@@ -220,12 +273,12 @@ def cb_projtable(row, vprojdata):
     ]
 )
 def cb_vertable(row, verdata, projname):
-    global hub
+    global bd
 
     if row is None or len(row) < 1:
         raise dash.exceptions.PreventUpdate
 
-    return vers.vertable(hub, row, verdata, projname)
+    return vers.vertable(bd, row, verdata, projname)
 
 
 @app.callback(
@@ -281,12 +334,12 @@ def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername):
         State('sniptable', 'data'),
         State('sniptable', 'derived_virtual_data'),
         State('sniptable', 'derived_virtual_selected_rows'),
-        State('projverurl', 'data')
+        State('projverurl', 'data'),
     ]
 )
 def cb_snipactions(snip_selected_clicks, snip_all_clicks, action,
                    origdata, vdata, selected_rows, projverurl):
-    global hub
+    global bd
 
     print("cb_snipactions")
     ctx = dash.callback_context.triggered[0]
@@ -301,7 +354,7 @@ def cb_snipactions(snip_selected_clicks, snip_all_clicks, action,
     if len(rows) == 0:
         raise dash.exceptions.PreventUpdate
 
-    return snippets.snipactions(hub, action, origdata, vdata, rows, projverurl)
+    return snippets.snipactions(bd, action, origdata, vdata, rows, projverurl)
 
 
 @app.callback(
@@ -322,7 +375,7 @@ def cb_snipactions(snip_selected_clicks, snip_all_clicks, action,
 )
 def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
                    origdata, vdata, selected_rows, projverurl):
-    global hub
+    global bd
 
     print("cb_compactions")
     ctx = dash.callback_context.triggered[0]
@@ -337,7 +390,7 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
     if len(rows) == 0 or action is None:
         raise dash.exceptions.PreventUpdate
 
-    return comps.compactions(hub, action, origdata, vdata, rows, projverurl)
+    return comps.compactions(bd, action, origdata, vdata, rows, projverurl)
 
 
 @app.callback(
@@ -359,7 +412,7 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
 )
 def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, reload, action,
                    origdata, vdata, selected_rows, projverurl):
-    global hub
+    global bd
 
     print("cb_vulnactions")
     ctx = dash.callback_context.triggered[0]
@@ -369,7 +422,7 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, reload, action,
     elif ctx_caller == 'button_vuln_all.n_clicks':
         rows = range(len(vdata))
     elif ctx_caller == 'button_vuln_reload.n_clicks':
-        vulndf = vulns.get_vulns_data(hub, projverurl)
+        vulndf = vulns.get_vulns_data(bd, projverurl)
         return vulndf.to_dict('records'), vulns.make_vuln_toast('Reloaded vulnerabilities')
     else:
         raise dash.exceptions.PreventUpdate
@@ -377,7 +430,7 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, reload, action,
     if len(rows) == 0 or action is None:
         raise dash.exceptions.PreventUpdate
 
-    return vulns.vulnactions(hub, action, origdata, vdata, rows)
+    return vulns.vulnactions(bd, action, origdata, vdata, rows)
 
 
 @app.callback(
@@ -393,13 +446,14 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, reload, action,
     ]
 )
 def cb_trend(button, purl, vername):
+    global bd
 
     if button is None:
         raise dash.exceptions.PreventUpdate
 
     print("\n\nProcessing project version '{}'".format(purl))
 
-    compdata, vulndata, scans = trend.proc_journals(hub, purl, vername)
+    compdata, vulndata, scans = trend.proc_journals(bd, purl, vername)
     if compdata is None:
         return '', ''
 
@@ -424,6 +478,34 @@ def cb_downloadspdx(button, spdxfile):
     filepath = 'SPDX/' + spdxfile
 
     return send_file(filepath)
+
+
+@app.callback(
+    [
+        Output("config_collapse", 'is_open'),
+        Output("projtable", "data"),
+    ],
+    [
+        Input('buttons_config_go', 'n_clicks'),
+        State('config_server', 'value'),
+        State('config_apikey', 'value'),
+    ]
+)
+def cb_configserver(button, server, apikey):
+    global bd
+
+    if button is None:
+        raise dash.exceptions.PreventUpdate
+
+    bd = Client(
+        token=apikey,
+        base_url=server,
+        timeout=300,
+        # verify=False  # TLS certificate verification
+    )
+
+    projdf = projs.get_project_data(bd)
+    return False, projdf.to_dict('records')
 
 
 if __name__ == '__main__':
