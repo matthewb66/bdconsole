@@ -150,7 +150,7 @@ def make_ver_toast(message):
     )
 
 
-def vertable(bd, row, verdata, projname):
+def ver_callback(bd, row, verdata, projname):
     vername = verdata[row[0]]['versionName']
     projverurl = str(verdata[row[0]]['_meta.href'])
     df_comp_new = comps.get_comps_data(bd, projverurl)
@@ -167,8 +167,8 @@ def vertable(bd, row, verdata, projname):
     spdxcardlabel = 'Project: ' + projname + ' - Version: ' + vername
 
     return create_vercard(verdata[row[0]], df_comp_new, vername, projname), \
-        comps.create_compstab(df_comp_new, projname, vername), False, "Components (" + \
-        str(len(df_comp_new.index)) + ")", \
+        comps.create_compstab(df_comp_new, projname, vername), False, \
+        "Components (" + str(len(df_comp_new.index)) + ")", \
         vulns.create_vulnstab(df_vuln_new, projname, vername), False, \
         "Vulnerabilities (" + str(len(df_vuln_new.index)) + ")", \
         snippets.create_snippetstab(snippetdata, projname, vername), False, "Snippets (" + str(snipcount) + ")", \

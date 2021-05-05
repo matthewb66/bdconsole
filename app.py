@@ -163,7 +163,7 @@ app.layout = dbc.Container(
                         [
                             dbc.Tab(  # PROJECTS TAB
                                 projs.create_projtab(df_proj, df_ver),
-                                label="Projects (" + str(len(df_proj)) + ")",
+                                label="Projects",
                                 tab_id="tab_projects", id="tab_projects"
                             ),
                             dbc.Tab(  # COMPONENTS TAB
@@ -227,7 +227,7 @@ def cb_projtable(row, vprojdata):
 
     # if os.path.isfile('.restconfig.json') and bd is not None and (df_proj is None or len(df_proj.index) == 0):
     if bd is not None and (df_proj is None or len(df_proj.index) == 0):
-            df_proj = projs.get_project_data(bd)
+        df_proj = projs.get_project_data(bd)
 
     if row is None:
         raise dash.exceptions.PreventUpdate
@@ -274,11 +274,12 @@ def cb_projtable(row, vprojdata):
 )
 def cb_vertable(row, verdata, projname):
     global bd
+    global df_proj
 
     if row is None or len(row) < 1:
         raise dash.exceptions.PreventUpdate
 
-    return vers.vertable(bd, row, verdata, projname)
+    return vers.ver_callback(bd, row, verdata, projname)
 
 
 @app.callback(
@@ -484,6 +485,7 @@ def cb_downloadspdx(button, spdxfile):
     [
         Output("config_collapse", 'is_open'),
         Output("projtable", "data"),
+        Output("tab_projects", "label"),
     ],
     [
         Input('buttons_config_go', 'n_clicks'),
@@ -505,7 +507,9 @@ def cb_configserver(button, server, apikey):
     )
 
     projdf = projs.get_project_data(bd)
-    return False, projdf.to_dict('records')
+    projlabel = "Projects (" + str(len(projdf.index)) + ")"
+
+    return False, projdf.to_dict('records'), projlabel
 
 
 if __name__ == '__main__':
