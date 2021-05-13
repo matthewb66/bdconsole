@@ -544,7 +544,9 @@ def cb_configserver(button, server, apikey):
     )
 
     projdf = projs.get_project_data(bd)
-    return False, projdf.to_dict('records')
+    projlabel = "Projects (" + str(len(projdf.index)) + ")"
+
+    return False, projdf.to_dict('records'), projlabel
 
 
 if __name__ == '__main__':

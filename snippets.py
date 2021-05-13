@@ -149,7 +149,8 @@ def get_snippet_entries(bd, path):
     #     return response.json()
     # else:
     #     return {}
-    return bd.get_json(url)
+    snipjson = bd.get_json(url)
+    return snipjson
 
 
 def ignore_snippet_bom_entry(bd, url, scanid, nodeid, snippetid, ignore):
@@ -200,7 +201,7 @@ def get_snippets_data(bd, path):
                     filename = os.path.join(match['matchFilePath'], snippet_item['name'])
                 else:
                     filename = ''
-                if 'coverage' in match.keys():
+                if 'matchCoverage' in match.keys():
                     coverage = match['matchCoverage']
                 else:
                     coverage = ''
