@@ -494,7 +494,7 @@ def process_children(compverurl, child_url, indenttext):
 
 	# print(res.json())
 	for child in res.json()['items']:
-		if 'componentVersionName' in child and 'componentVersionName' in child:
+		if 'componentName' in child and 'componentVersionName' in child:
 			print("{}{}/{}".format(indenttext, child['componentName'], child['componentVersionName']))
 			children.append(child['componentVersion'])
 			thismatchtypes.append(child['matchTypes'])

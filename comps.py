@@ -76,9 +76,9 @@ def create_compstab(compdata, projname, vername):
                     ), width=2,
                     align='center',
                 ),
-                dbc.Col(dbc.Button("Selected", id="button_comp_selected",
+                dbc.Col(dbc.Button("Selected Rows", id="button_comp_selected",
                                    className="mr-2", size='sm'), width=1),
-                dbc.Col(dbc.Button("All Filtered", id="button_comp_all",
+                dbc.Col(dbc.Button("All Filtered Rows", id="button_comp_all",
                                    className="mr-2", size='sm'), width=1),
             ]
         ),
@@ -90,7 +90,8 @@ def create_compstab(compdata, projname, vername):
                     style_cell={
                         'overflow': 'hidden',
                         'textOverflow': 'ellipsis',
-                        'maxWidth': 0
+                        'maxWidth': 0,
+                        'font_size': '12px',
                     },
                     data=compdata.to_dict('records'),
                     page_size=30, sort_action='native',

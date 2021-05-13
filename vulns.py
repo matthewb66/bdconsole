@@ -1,4 +1,3 @@
-import json
 import dash_bootstrap_components as dbc
 import dash_core_components as dcc
 import dash_html_components as html
@@ -17,11 +16,13 @@ def get_vulns_data(bd, projverurl):
 
     vulns = bd.get_json(projverurl + '/vulnerable-bom-components?limit=5000')
     df = pd.json_normalize(vulns, record_path=['items'])
-    for index, vuln in enumerate(vulns['items']):
-        df.loc[index, 'json'] = json.dumps(vuln)
+    # for index, vuln in enumerate(vulns['items']):
+    #     df.loc[index, 'json'] = json.dumps(vuln)
 
-    df = df.drop_duplicates(subset=["componentVersion",  'vulnerabilityWithRemediation.vulnerabilityName'],
-                            keep="first", inplace=False)
+    # df = df.drop_duplicates(subset=['componentVersion',
+    #                                 'vulnerabilityWithRemediation.vulnerabilityName',
+    #                                 'componentVersionOriginId'],
+    #                         keep="first", inplace=False)
 
     if len(df.index) > 0:
         df = df[df['ignored'] != True]
@@ -33,7 +34,7 @@ def get_vulns_data(bd, projverurl):
             pd.DatetimeIndex(df['vulnerabilityWithRemediation.remediationUpdatedAt']).strftime("%Y-%m-%d")
 
     print('Found ' + str(len(df.index)) + ' vulnerabilities')
-    return df
+    return df, vulns['items']
 
 
 col_data_vulns = [
@@ -41,6 +42,7 @@ col_data_vulns = [
     {"name": ['Version'], "id": "componentVersionName"},
     {"name": ['Vulnerability'], "id": "vulnerabilityWithRemediation.vulnerabilityName"},
     {"name": ['Related Vuln'], "id": "vulnerabilityWithRemediation.relatedVulnerability"},
+    {"name": ['Orig'], "id": "componentVersionOriginId"},
     {"name": ['Description'], "id": "vulnerabilityWithRemediation.description"},
     {"name": ['Published Date'], "id": "vulnerabilityWithRemediation.vulnerabilityPublishedDate"},
     {"name": ['Updated Date'], "id": "vulnerabilityWithRemediation.vulnerabilityUpdatedDate"},
@@ -85,9 +87,9 @@ def create_vulnstab(vulndata, projname, vername):
                     ), width=2,
                     align='center',
                 ),
-                dbc.Col(dbc.Button("Selected", id="button_vuln_selected",
+                dbc.Col(dbc.Button("Selected Rows", id="button_vuln_selected",
                                    className="mr-2", size='sm'), width=1),
-                dbc.Col(dbc.Button("All Filtered", id="button_vuln_all",
+                dbc.Col(dbc.Button("All Filtered Rows", id="button_vuln_all",
                                    className="mr-2", size='sm'), width=1),
                 dbc.Col(dbc.Button("Reload", id="button_vuln_reload",
                                    className="mr-2", size='sm'), width=1),
@@ -101,7 +103,8 @@ def create_vulnstab(vulndata, projname, vername):
                     style_cell={
                         'overflow': 'hidden',
                         'textOverflow': 'ellipsis',
-                        'maxWidth': 0
+                        'maxWidth': 0,
+                        'font_size': '12px',
                     },
                     data=vulndata.to_dict('records'),
                     page_size=30, sort_action='native',
@@ -134,7 +137,7 @@ def create_vulnstab(vulndata, projname, vername):
                         },
                         {
                             'if': {'column_id': 'vulnerabilityWithRemediation.vulnerabilityName'},
-                            'width': '10%'
+                            'width': '8%'
                         },
                         {
                             'if': {'column_id': 'vulnerabilityWithRemediation.relatedVulnerability'},
@@ -146,11 +149,11 @@ def create_vulnstab(vulndata, projname, vername):
                         },
                         {
                             'if': {'column_id': 'vulnerabilityWithRemediation.vulnerabilityPublishedDate'},
-                            'width': '8%'
+                            'width': '5%'
                         },
                         {
                             'if': {'column_id': 'vulnerabilityWithRemediation.vulnerabilityUpdatedDate'},
-                            'width': '8%'
+                            'width': '5%'
                         },
                         {
                             'if': {'column_id': 'vulnerabilityWithRemediation.overallScore'},
@@ -279,7 +282,7 @@ def make_vuln_toast(message):
     )
 
 
-def vulnactions(bd, action, origdata, vdata, rows):
+def vulnactions(bd, vulnjson, action, origdata, vdata, rows):
 
     def do_vuln_action(bbd, comp):
         try:
@@ -314,7 +317,6 @@ def vulnactions(bd, action, origdata, vdata, rows):
     for row in rows:
         thisvuln = vdata[row]
 
-        vulndata = json.loads(thisvuln['json'])
         if action in vulnaction_dict.keys() and \
                 thisvuln['vulnerabilityWithRemediation.remediationStatus'] != action:
             entry = vulnaction_dict[action]
@@ -323,21 +325,28 @@ def vulnactions(bd, action, origdata, vdata, rows):
             for origrow, origcomp in enumerate(origdata):
                 if (origcomp['componentVersion'] == thisvuln['componentVersion']) and \
                         (origcomp['vulnerabilityWithRemediation.vulnerabilityName'] ==
-                         thisvuln['vulnerabilityWithRemediation.vulnerabilityName']):
+                         thisvuln['vulnerabilityWithRemediation.vulnerabilityName']) and \
+                        (origcomp['componentVersionOriginId'] == thisvuln['componentVersionOriginId']):
                     foundrow = origrow
                     break
 
             if foundrow >= 0:
-                vulndata['remediationStatus'] = action
-                vulndata['remediationComment'] = entry['comment']
-                origdata[foundrow]['vulnerabilityWithRemediation.remediationStatus'] = action
-                origdata[foundrow]['json'] = json.dumps(vulndata)
-                confirmation = entry['confirmation']
-                if do_vuln_action(bd, vulndata):
-                    print('Remediated vuln: ' + vulndata['vulnerabilityWithRemediation']['vulnerabilityName'])
-                    count += 1
-                else:
-                    error = True
+                for vuln in vulnjson:
+                    if vuln['vulnerabilityWithRemediation']['vulnerabilityName'] == \
+                            thisvuln['vulnerabilityWithRemediation.vulnerabilityName'] and vuln['componentVersion'] == \
+                            thisvuln['componentVersion'] and thisvuln['componentVersionOriginId'] == \
+                            vuln['componentVersionOriginId']:
+                        vuln['remediationStatus'] = action
+                        vuln['remediationComment'] = entry['comment']
+                        origdata[foundrow]['vulnerabilityWithRemediation.remediationStatus'] = action
+                        # origdata[foundrow]['json'] = json.dumps(vulndata)
+                        confirmation = entry['confirmation']
+                        if do_vuln_action(bd, vuln):
+                            print('Remediated vuln: ' + vuln['vulnerabilityWithRemediation']['vulnerabilityName'])
+                            count += 1
+                            break
+                        else:
+                            error = True
             else:
                 error = True
 
@@ -346,6 +355,6 @@ def vulnactions(bd, action, origdata, vdata, rows):
 
     toast = ''
     if count > 0:
-        toast = make_vuln_toast("{} Components {}".format(count, confirmation))
+        toast = make_vuln_toast("{} Vulnerabilities {}".format(count, confirmation))
 
     return origdata, toast

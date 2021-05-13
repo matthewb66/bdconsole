@@ -48,7 +48,8 @@ def create_projtable(projdf):
         style_cell={
             'overflow': 'hidden',
             'textOverflow': 'ellipsis',
-            'maxWidth': 0
+            'maxWidth': 0,
+            'font_size': '12px',
         },
         data=projdf.to_dict('records'),
         page_size=30, sort_action='native',

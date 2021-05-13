@@ -18,7 +18,7 @@ import comps
 import vulns
 import vers
 import projs
-import actions
+# import actions
 
 from blackduck import Client
 import logging
@@ -28,6 +28,7 @@ import os
 # hub = HubInstance()
 
 bd = None
+vulns_json = ''
 
 spdx_proc = None
 
@@ -190,12 +191,12 @@ app.layout = dbc.Container(
                                 tab_id="tab_trend", id="tab_trend",
                                 disabled=True,
                             ),
-                            dbc.Tab(  # ACTIONS TAB
-                                actions.create_actions_tab('', ''),
-                                label="Actions",
-                                tab_id="tab_actions", id="tab_actions",
-                                disabled=True,
-                            ),
+                            # dbc.Tab(  # ACTIONS TAB
+                            #     actions.create_actions_tab('', ''),
+                            #     label="Actions",
+                            #     tab_id="tab_actions", id="tab_actions",
+                            #     disabled=True,
+                            # ),
                         ],
                         id="tabs",
                         active_tab='tab_projects',
@@ -227,7 +228,7 @@ def cb_projtable(row, vprojdata):
 
     # if os.path.isfile('.restconfig.json') and bd is not None and (df_proj is None or len(df_proj.index) == 0):
     if bd is not None and (df_proj is None or len(df_proj.index) == 0):
-            df_proj = projs.get_project_data(bd)
+        df_proj = projs.get_project_data(bd)
 
     if row is None:
         raise dash.exceptions.PreventUpdate
@@ -243,26 +244,26 @@ def cb_projtable(row, vprojdata):
 
 @app.callback(
     [
-        Output("vercard", "children"),
-        Output("tab_comps", "children"),
-        Output("tab_comps", "disabled"),
-        Output("tab_comps", "label"),
-        Output("tab_vulns", "children"),
-        Output("tab_vulns", "disabled"),
-        Output("tab_vulns", "label"),
-        Output("tab_snippets", "children"),
-        Output("tab_snippets", "disabled"),
-        Output("tab_snippets", "label"),
-        Output("tab_trend", "disabled"),
-        Output("tab_trend", "children"),
-        Output("tab_actions", "disabled"),
-        Output("spdxtitle", "children"),
-        Output("spdx_file", "value"),
-        Output('vername', 'data'),
-        Output('projverurl', 'data'),
+        Output("vercard", "children"),       # 1
+        Output("tab_comps", "children"),     # 2
+        Output("tab_comps", "disabled"),     # 3
+        Output("tab_comps", "label"),        # 4
+        Output("tab_vulns", "children"),     # 5
+        Output("tab_vulns", "disabled"),     # 6
+        Output("tab_vulns", "label"),        # 7
+        Output("tab_snippets", "children"),  # 8
+        Output("tab_snippets", "disabled"),  # 9
+        Output("tab_snippets", "label"),     # 10
+        Output("tab_trend", "disabled"),     # 11
+        Output("tab_trend", "children"),     # 12
+        # Output("tab_actions", "disabled"),          # ACTIONS tab
+        # Output("spdxtitle", "children"),            # ACTIONS tab
+        # Output("spdx_file", "value"),               # ACTIONS tab
+        Output('vername', 'data'),           # 13
+        Output('projverurl', 'data'),        # 14
         # Output('allcompdata', 'data'),
         # Output('allvulndata', 'data'),
-        Output("toast-container-ver", "children"),
+        Output("toast-container-ver", "children"),      # 15
     ],
     [
         # Input("projtable", "selected_rows"),
@@ -274,11 +275,48 @@ def cb_projtable(row, vprojdata):
 )
 def cb_vertable(row, verdata, projname):
     global bd
+    global vulns_json
 
     if row is None or len(row) < 1:
         raise dash.exceptions.PreventUpdate
 
-    return vers.vertable(bd, row, verdata, projname)
+    vername = verdata[row[0]]['versionName']
+    projverurl = str(verdata[row[0]]['_meta.href'])
+    df_comp_new = comps.get_comps_data(bd, projverurl)
+    if df_comp_new is None:
+        toast = vers.make_ver_toast('Unable to get components - check permissions')
+        return '', \
+            '', True, "Components", \
+            '', True, '', \
+            '', True, '', \
+            True, '', \
+            vername, projverurl, ''
+
+    df_vuln, vulns_json = vulns.get_vulns_data(bd, projverurl)
+
+    snippetdata, snipcount = snippets.get_snippets_data(bd, projverurl)
+
+    spdx_file = "SPDX_" + projname.replace(' ', '-') + '-' + vername.replace(' ', '-') + ".json"
+    spdxcardlabel = 'Project: ' + projname + ' - Version: ' + vername
+
+    # return vers.create_vercard(verdata[row[0]], df_comp_new, vername, projname), \
+    #     comps.create_compstab(df_comp_new, projname, vername), False, "Components (" + \
+    #     str(len(df_comp_new.index)) + ")", \
+    #     vulns.create_vulnstab(df_vuln, projname, vername), False, \
+    #     "Vulnerabilities (" + str(len(df_vuln.index)) + ")", \
+    #     snippets.create_snippetstab(snippetdata, projname, vername), False, "Snippets (" + str(snipcount) + ")", \
+    #     False, trend.create_trendtab(projname, vername, '', ''), \
+    #     False, spdxcardlabel, spdx_file, vername, projverurl, ''
+    comptabstr = "Components (" + str(len(df_comp_new.index)) + ")"
+    vulntabstr = "Vulnerabilities (" + str(len(df_vuln.index)) + ")"
+    sniptabstr = "Snippets (" + str(snipcount) + ")"
+
+    return vers.create_vercard(verdata[row[0]], df_comp_new, vername, projname), \
+        comps.create_compstab(df_comp_new, projname, vername), False, comptabstr, \
+        vulns.create_vulnstab(df_vuln, projname, vername), False, vulntabstr, \
+        snippets.create_snippetstab(snippetdata, projname, vername), False, sniptabstr, \
+        False, trend.create_trendtab(projname, vername, '', ''), \
+        vername, projverurl, ''
 
 
 @app.callback(
@@ -413,6 +451,7 @@ def cb_compactions(comp_selected_clicks, comp_all_clicks, action,
 def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, reload, action,
                    origdata, vdata, selected_rows, projverurl):
     global bd
+    global vulns_json
 
     print("cb_vulnactions")
     ctx = dash.callback_context.triggered[0]
@@ -422,15 +461,15 @@ def cb_vulnactions(vuln_selected_clicks, vuln_all_clicks, reload, action,
     elif ctx_caller == 'button_vuln_all.n_clicks':
         rows = range(len(vdata))
     elif ctx_caller == 'button_vuln_reload.n_clicks':
-        vulndf = vulns.get_vulns_data(bd, projverurl)
-        return vulndf.to_dict('records'), vulns.make_vuln_toast('Reloaded vulnerabilities')
+        df_vuln, vulns_json = vulns.get_vulns_data(bd, projverurl)
+        return df_vuln.to_dict('records'), vulns.make_vuln_toast('Reloaded vulnerabilities')
     else:
         raise dash.exceptions.PreventUpdate
 
     if len(rows) == 0 or action is None:
         raise dash.exceptions.PreventUpdate
 
-    return vulns.vulnactions(bd, action, origdata, vdata, rows)
+    return vulns.vulnactions(bd, vulns_json, action, origdata, vdata, rows)
 
 
 @app.callback(
@@ -509,4 +548,4 @@ def cb_configserver(button, server, apikey):
 
 
 if __name__ == '__main__':
-    app.run_server(host='127.0.0.1', port=8888, debug=True)
+    app.run_server(host='127.0.0.1', port=8889, debug=False)

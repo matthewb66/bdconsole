@@ -4,11 +4,6 @@ import pandas as pd
 import dash_table
 from datetime import datetime
 
-import snippets
-import trend
-import comps
-import vulns
-
 
 def get_versions_data(bd, projurl):
     # res = hub.execute_get(proj + '/versions?limit=200')
@@ -46,7 +41,8 @@ def create_vertable(verdata):
         style_cell={
             'overflow': 'hidden',
             'textOverflow': 'ellipsis',
-            'maxWidth': 0
+            'maxWidth': 0,
+            'font_size': '12px',
         },
         data=verdata.to_dict('records'),
         page_size=30, sort_action='native',
@@ -148,29 +144,3 @@ def make_ver_toast(message):
         dismissable=True,
         icon="info",
     )
-
-
-def vertable(bd, row, verdata, projname):
-    vername = verdata[row[0]]['versionName']
-    projverurl = str(verdata[row[0]]['_meta.href'])
-    df_comp_new = comps.get_comps_data(bd, projverurl)
-    if df_comp_new is None:
-        toast = make_ver_toast('Unable to get components - check permissions')
-        return '', '', True, "Components", True, '', True, '', True, '', vername, projverurl, \
-               None, toast
-
-    df_vuln_new = vulns.get_vulns_data(bd, projverurl)
-
-    snippetdata, snipcount = snippets.get_snippets_data(bd, projverurl)
-
-    spdx_file = "SPDX_" + projname.replace(' ', '-') + '-' + vername.replace(' ', '-') + ".json"
-    spdxcardlabel = 'Project: ' + projname + ' - Version: ' + vername
-
-    return create_vercard(verdata[row[0]], df_comp_new, vername, projname), \
-        comps.create_compstab(df_comp_new, projname, vername), False, "Components (" + \
-        str(len(df_comp_new.index)) + ")", \
-        vulns.create_vulnstab(df_vuln_new, projname, vername), False, \
-        "Vulnerabilities (" + str(len(df_vuln_new.index)) + ")", \
-        snippets.create_snippetstab(snippetdata, projname, vername), False, "Snippets (" + str(snipcount) + ")", \
-        False, trend.create_trendtab(projname, vername, '', ''), \
-        False, spdxcardlabel, spdx_file, vername, projverurl, ''
