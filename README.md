@@ -1,6 +1,8 @@
 # bdconsole
 Black Duck Dash Batch Console v1.0 Beta
 
+This script is provided under an OSS license (specified in the LICENSE file) to assist users when scanning projects using the Synopsys Detect program to scan projects.
+
 # Introduction
 
 This is a plotly Dash app for viewing and managing components, vulnerabilities and snippets in a [Black Duck](https://www.synopsys.com/software-integrity/security-testing/software-composition-analysis.html) server using the API.
