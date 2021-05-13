@@ -42,20 +42,22 @@ logging.basicConfig(
 app = dash.Dash(external_stylesheets=[dbc.themes.COSMO])
 server = app.server
 
-if not os.path.isfile('conf/users.txt'):
-    print('No users.txt file - exiting')
-    sys.exit(3)
-
-with open('conf/users.txt') as f:
-    fdata = f.read()
-    VALID_USERNAME_PASSWORD_PAIRS = json.loads(fdata)
-    f.close()
-
-# app = dash.Dash(external_stylesheets=[dbc.themes.COSMO])
-app.auth = dash_auth.BasicAuth(
-    app,
-    VALID_USERNAME_PASSWORD_PAIRS
-)
+# BASIC AUTH
+#
+# if not os.path.isfile('conf/users.txt'):
+#     print('No users.txt file - exiting')
+#     sys.exit(3)
+#
+# with open('conf/users.txt') as f:
+#     fdata = f.read()
+#     VALID_USERNAME_PASSWORD_PAIRS = json.loads(fdata)
+#     f.close()
+#
+# # app = dash.Dash(external_stylesheets=[dbc.themes.COSMO])
+# app.auth = dash_auth.BasicAuth(
+#     app,
+#     VALID_USERNAME_PASSWORD_PAIRS
+# )
 
 df_proj = pd.DataFrame()
 
@@ -319,45 +321,45 @@ def cb_vertable(row, verdata, projname):
         vername, projverurl, ''
 
 
-@app.callback(
-    [
-        Output('spdx_status', 'children'),
-        Output('spdx_interval', 'disabled'),
-        Output('spdx_interval', 'n_intervals'),
-        Output('spdx_collapse', 'is_open'),
-    ],
-    [
-        Input('buttons_export_spdx', 'n_clicks'),
-        Input('spdx_interval', 'n_intervals'),
-        State('spdx_file', 'value'),
-        State('spdx_recursive', 'value'),
-        State('projname', 'data'),
-        State('vername', 'data'),
-    ]
-)
-def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername):
-    global spdx_proc
-
-    if spdx_click is None and n == 0:
-        print('NO ACTION')
-        raise dash.exceptions.PreventUpdate
-
-    if n <= 0:
-        # subprocess.run(["python3", "export_spdx.py", "-o", spdx_file, projname, vername],
-        #                capture_output=True)
-        cmd = ["python3", "addons/export_spdx.py", "-o", "SPDX/" + spdx_file, projname, vername]
-        if len(spdx_rec) > 0 and spdx_rec[0] == 1:
-            cmd.append('--recursive')
-        spdx_proc = subprocess.Popen(cmd, close_fds=True)
-        return 'Processing SPDX', False, n, False
-    else:
-        print("Polling SPDX process")
-        spdx_proc.poll()
-        ret = spdx_proc.returncode
-        if ret is not None:
-            return 'Export Complete', True, 0, True
-        else:
-            return 'Processing SPDX', False, n, False
+# @app.callback(
+#     [
+#         Output('spdx_status', 'children'),
+#         Output('spdx_interval', 'disabled'),
+#         Output('spdx_interval', 'n_intervals'),
+#         Output('spdx_collapse', 'is_open'),
+#     ],
+#     [
+#         Input('buttons_export_spdx', 'n_clicks'),
+#         Input('spdx_interval', 'n_intervals'),
+#         State('spdx_file', 'value'),
+#         State('spdx_recursive', 'value'),
+#         State('projname', 'data'),
+#         State('vername', 'data'),
+#     ]
+# )
+# def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername):
+#     global spdx_proc
+#
+#     if spdx_click is None and n == 0:
+#         print('NO ACTION')
+#         raise dash.exceptions.PreventUpdate
+#
+#     if n <= 0:
+#         # subprocess.run(["python3", "export_spdx.py", "-o", spdx_file, projname, vername],
+#         #                capture_output=True)
+#         cmd = ["python3", "addons/export_spdx.py", "-o", "SPDX/" + spdx_file, projname, vername]
+#         if len(spdx_rec) > 0 and spdx_rec[0] == 1:
+#             cmd.append('--recursive')
+#         spdx_proc = subprocess.Popen(cmd, close_fds=True)
+#         return 'Processing SPDX', False, n, False
+#     else:
+#         print("Polling SPDX process")
+#         spdx_proc.poll()
+#         ret = spdx_proc.returncode
+#         if ret is not None:
+#             return 'Export Complete', True, 0, True
+#         else:
+#             return 'Processing SPDX', False, n, False
 
 
 @app.callback(
@@ -502,27 +504,28 @@ def cb_trend(button, purl, vername):
     return dcc.Graph(figure=compfig, id='fig_time_trend'), dcc.Graph(figure=vulnfig, id='fig_time_trend')
 
 
-@app.callback(
-    Output("download_spdx", "data"),
-    [
-        Input('button_download_spdx', 'n_clicks'),
-        State('spdx_file', 'value'),
-    ]
-)
-def cb_downloadspdx(button, spdxfile):
-
-    if button is None:
-        raise dash.exceptions.PreventUpdate
-
-    filepath = 'SPDX/' + spdxfile
-
-    return send_file(filepath)
+# @app.callback(
+#     Output("download_spdx", "data"),
+#     [
+#         Input('button_download_spdx', 'n_clicks'),
+#         State('spdx_file', 'value'),
+#     ]
+# )
+# def cb_downloadspdx(button, spdxfile):
+#
+#     if button is None:
+#         raise dash.exceptions.PreventUpdate
+#
+#     filepath = 'SPDX/' + spdxfile
+#
+#     return send_file(filepath)
 
 
 @app.callback(
     [
         Output("config_collapse", 'is_open'),
         Output("projtable", "data"),
+        Output("tab_projects", "label"),
     ],
     [
         Input('buttons_config_go', 'n_clicks'),
@@ -550,4 +553,4 @@ def cb_configserver(button, server, apikey):
 
 
 if __name__ == '__main__':
-    app.run_server(host='127.0.0.1', port=8889, debug=False)
+    app.run_server(host='127.0.0.1', port=8889, debug=True)
