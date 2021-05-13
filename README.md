@@ -1,7 +1,7 @@
 # bdconsole
 Black Duck Dash Batch Console v1.0 Beta
 
-This script is provided under an OSS license (specified in the LICENSE file) to assist users when scanning projects using the Synopsys Detect program to scan projects.
+This script is provided under an OSS license (specified in the LICENSE file) and does not represent an extension or modification to any commercial licenses for Synopsys products.
 
 # Introduction
 
