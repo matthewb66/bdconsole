@@ -1,6 +1,6 @@
 import json
 import sys
-# import os
+import os
 # from time import time
 import dash
 import dash_bootstrap_components as dbc
@@ -347,7 +347,9 @@ def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername):
     if n <= 0:
         # subprocess.run(["python3", "export_spdx.py", "-o", spdx_file, projname, vername],
         #                capture_output=True)
-        cmd = ["python3", "addons/export_spdx.py", "-o", "SPDX/" + spdx_file, projname, vername]
+        outfile = os.path.join("SPDX", spdx_file)
+        pyfile = os.path.join("addons", "export_spdx.py")
+        cmd = ["python3", pyfile, "-o", outfile, projname, vername]
         if len(spdx_rec) > 0 and spdx_rec[0] == 1:
             cmd.append('--recursive')
         spdx_proc = subprocess.Popen(cmd, close_fds=True)
@@ -516,7 +518,7 @@ def cb_downloadspdx(button, spdxfile):
     if button is None:
         raise dash.exceptions.PreventUpdate
 
-    filepath = 'SPDX/' + spdxfile
+    filepath = os.path.join('SPDX', spdxfile)
 
     return send_file(filepath)
 
