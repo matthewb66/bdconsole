@@ -18,7 +18,7 @@ import comps
 import vulns
 import vers
 import projs
-# import actions
+import actions
 
 from blackduck import Client
 import logging
@@ -193,12 +193,12 @@ app.layout = dbc.Container(
                                 tab_id="tab_trend", id="tab_trend",
                                 disabled=True,
                             ),
-                            # dbc.Tab(  # ACTIONS TAB
-                            #     actions.create_actions_tab('', ''),
-                            #     label="Actions",
-                            #     tab_id="tab_actions", id="tab_actions",
-                            #     disabled=True,
-                            # ),
+                            dbc.Tab(  # ACTIONS TAB
+                                actions.create_actions_tab('', ''),
+                                label="Actions",
+                                tab_id="tab_actions", id="tab_actions",
+                                disabled=True,
+                            ),
                         ],
                         id="tabs",
                         active_tab='tab_projects',
@@ -258,9 +258,9 @@ def cb_projtable(row, vprojdata):
         Output("tab_snippets", "label"),     # 10
         Output("tab_trend", "disabled"),     # 11
         Output("tab_trend", "children"),     # 12
-        # Output("tab_actions", "disabled"),          # ACTIONS tab
-        # Output("spdxtitle", "children"),            # ACTIONS tab
-        # Output("spdx_file", "value"),               # ACTIONS tab
+        Output("tab_actions", "disabled"),          # ACTIONS tab
+        Output("spdxtitle", "children"),            # ACTIONS tab
+        Output("spdx_file", "value"),               # ACTIONS tab
         Output('vername', 'data'),           # 13
         Output('projverurl', 'data'),        # 14
         # Output('allcompdata', 'data'),
@@ -292,7 +292,7 @@ def cb_vertable(row, verdata, projname):
             '', True, '', \
             '', True, '', \
             True, '', \
-            vername, projverurl, ''
+            vername, projverurl, toast
 
     df_vuln, vulns_json = vulns.get_vulns_data(bd, projverurl)
 
@@ -301,65 +301,65 @@ def cb_vertable(row, verdata, projname):
     spdx_file = "SPDX_" + projname.replace(' ', '-') + '-' + vername.replace(' ', '-') + ".json"
     spdxcardlabel = 'Project: ' + projname + ' - Version: ' + vername
 
-    # return vers.create_vercard(verdata[row[0]], df_comp_new, vername, projname), \
-    #     comps.create_compstab(df_comp_new, projname, vername), False, "Components (" + \
-    #     str(len(df_comp_new.index)) + ")", \
-    #     vulns.create_vulnstab(df_vuln, projname, vername), False, \
-    #     "Vulnerabilities (" + str(len(df_vuln.index)) + ")", \
-    #     snippets.create_snippetstab(snippetdata, projname, vername), False, "Snippets (" + str(snipcount) + ")", \
-    #     False, trend.create_trendtab(projname, vername, '', ''), \
-    #     False, spdxcardlabel, spdx_file, vername, projverurl, ''
-    comptabstr = "Components (" + str(len(df_comp_new.index)) + ")"
-    vulntabstr = "Vulnerabilities (" + str(len(df_vuln.index)) + ")"
-    sniptabstr = "Snippets (" + str(snipcount) + ")"
-
     return vers.create_vercard(verdata[row[0]], df_comp_new, vername, projname), \
-        comps.create_compstab(df_comp_new, projname, vername), False, comptabstr, \
-        vulns.create_vulnstab(df_vuln, projname, vername), False, vulntabstr, \
-        snippets.create_snippetstab(snippetdata, projname, vername), False, sniptabstr, \
+        comps.create_compstab(df_comp_new, projname, vername), False, "Components (" + \
+        str(len(df_comp_new.index)) + ")", \
+        vulns.create_vulnstab(df_vuln, projname, vername), False, \
+        "Vulnerabilities (" + str(len(df_vuln.index)) + ")", \
+        snippets.create_snippetstab(snippetdata, projname, vername), False, "Snippets (" + str(snipcount) + ")", \
         False, trend.create_trendtab(projname, vername, '', ''), \
-        vername, projverurl, ''
+        False, spdxcardlabel, spdx_file, vername, projverurl, ''
+    # comptabstr = "Components (" + str(len(df_comp_new.index)) + ")"
+    # vulntabstr = "Vulnerabilities (" + str(len(df_vuln.index)) + ")"
+    # sniptabstr = "Snippets (" + str(snipcount) + ")"
+    #
+    # return vers.create_vercard(verdata[row[0]], df_comp_new, vername, projname), \
+    #     comps.create_compstab(df_comp_new, projname, vername), False, comptabstr, \
+    #     vulns.create_vulnstab(df_vuln, projname, vername), False, vulntabstr, \
+    #     snippets.create_snippetstab(snippetdata, projname, vername), False, sniptabstr, \
+    #     False, trend.create_trendtab(projname, vername, '', ''), \
+    #     vername, projverurl, ''
 
 
-# @app.callback(
-#     [
-#         Output('spdx_status', 'children'),
-#         Output('spdx_interval', 'disabled'),
-#         Output('spdx_interval', 'n_intervals'),
-#         Output('spdx_collapse', 'is_open'),
-#     ],
-#     [
-#         Input('buttons_export_spdx', 'n_clicks'),
-#         Input('spdx_interval', 'n_intervals'),
-#         State('spdx_file', 'value'),
-#         State('spdx_recursive', 'value'),
-#         State('projname', 'data'),
-#         State('vername', 'data'),
-#     ]
-# )
-# def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername):
-#     global spdx_proc
-#
-#     if spdx_click is None and n == 0:
-#         print('NO ACTION')
-#         raise dash.exceptions.PreventUpdate
-#
-#     if n <= 0:
-#         # subprocess.run(["python3", "export_spdx.py", "-o", spdx_file, projname, vername],
-#         #                capture_output=True)
-#         cmd = ["python3", "addons/export_spdx.py", "-o", "SPDX/" + spdx_file, projname, vername]
-#         if len(spdx_rec) > 0 and spdx_rec[0] == 1:
-#             cmd.append('--recursive')
-#         spdx_proc = subprocess.Popen(cmd, close_fds=True)
-#         return 'Processing SPDX', False, n, False
-#     else:
-#         print("Polling SPDX process")
-#         spdx_proc.poll()
-#         ret = spdx_proc.returncode
-#         if ret is not None:
-#             return 'Export Complete', True, 0, True
-#         else:
-#             return 'Processing SPDX', False, n, False
+@app.callback(
+    [
+        Output('spdx_status', 'children'),
+        Output('spdx_interval', 'disabled'),
+        Output('spdx_interval', 'n_intervals'),
+        Output('spdx_collapse', 'is_open'),
+    ],
+    [
+        Input('buttons_export_spdx', 'n_clicks'),
+        Input('spdx_interval', 'n_intervals'),
+        State('spdx_file', 'value'),
+        State('spdx_recursive', 'value'),
+        State('projname', 'data'),
+        State('vername', 'data'),
+    ]
+)
+def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername):
+    global spdx_proc
+
+    if spdx_click is None and n == 0:
+        print('NO ACTION')
+        raise dash.exceptions.PreventUpdate
+
+    if n <= 0:
+        # subprocess.run(["python3", "export_spdx.py", "-o", spdx_file, projname, vername],
+        #                capture_output=True)
+        cmd = ["python3", "addons/export_spdx.py", "-o", "SPDX/" + spdx_file, projname, vername]
+        if len(spdx_rec) > 0 and spdx_rec[0] == 1:
+            cmd.append('--recursive')
+        spdx_proc = subprocess.Popen(cmd, close_fds=True)
+        return 'Processing SPDX', False, n, False
+    else:
+        print("Polling SPDX process")
+        spdx_proc.poll()
+        ret = spdx_proc.returncode
+        if ret is not None:
+            return 'Export Complete', True, 0, True
+        else:
+            return 'Processing SPDX', False, n, False
 
 
 @app.callback(
@@ -504,21 +504,21 @@ def cb_trend(button, purl, vername):
     return dcc.Graph(figure=compfig, id='fig_time_trend'), dcc.Graph(figure=vulnfig, id='fig_time_trend')
 
 
-# @app.callback(
-#     Output("download_spdx", "data"),
-#     [
-#         Input('button_download_spdx', 'n_clicks'),
-#         State('spdx_file', 'value'),
-#     ]
-# )
-# def cb_downloadspdx(button, spdxfile):
-#
-#     if button is None:
-#         raise dash.exceptions.PreventUpdate
-#
-#     filepath = 'SPDX/' + spdxfile
-#
-#     return send_file(filepath)
+@app.callback(
+    Output("download_spdx", "data"),
+    [
+        Input('button_download_spdx', 'n_clicks'),
+        State('spdx_file', 'value'),
+    ]
+)
+def cb_downloadspdx(button, spdxfile):
+
+    if button is None:
+        raise dash.exceptions.PreventUpdate
+
+    filepath = 'SPDX/' + spdxfile
+
+    return send_file(filepath)
 
 
 @app.callback(
