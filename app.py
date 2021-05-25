@@ -372,6 +372,7 @@ def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername, bd_url,
         #                capture_output=True)
         outfile = os.path.join("SPDX", spdx_file)
         pyfile = os.path.join("addons", "export_spdx.py")
+        print(shutil.which("python3"))
         if shutil.which("python3") is not None:
             python_exe = 'python3'
         elif shutil.which("python") is not None:
@@ -379,7 +380,7 @@ def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername, bd_url,
         else:
             return 'ERROR Python executable not found', True, 0, True
 
-        cmd = [python_exe, pyfile, "--blackduck_url", bd_url, "--blackduck_api_token", bd_api,
+        cmd = ['python', pyfile, "--blackduck_url", bd_url, "--blackduck_api_token", bd_api,
                "-o", outfile, projname, vername]
         print(cmd)
         if len(spdx_rec) > 0 and spdx_rec[0] == 1:

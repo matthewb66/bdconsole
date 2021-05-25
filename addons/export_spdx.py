@@ -109,7 +109,7 @@ parser.add_argument("-b", "--basic",
                     action='store_true')
 parser.add_argument("--blackduck_url", type=str, help="BLACKDUCK_URL", default="")
 parser.add_argument("--blackduck_api_token", type=str, help="BLACKDUCK_API_TOKEN", default="")
-parser.add_argument("--blackduck_trust_certs", help="BLACKDUCK trust certs", action='store_true')
+parser.add_argument("--blackduck_trust_certs", help="BLACKDUCK trust certs", action='store_false')
 
 args = parser.parse_args()
 
@@ -121,9 +121,9 @@ api = os.environ.get('BLACKDUCK_API_TOKEN')
 if args.blackduck_api_token:
     api = args.blackduck_api_token
 
-trust = True
+verify = True
 if args.blackduck_trust_certs:
-    trust = False
+    verify = False
 
 if url == '' or url is None:
     print('BLACKDUCK_URL not set or specified as option --blackduck_url')
@@ -136,7 +136,7 @@ if api == '' or api is None:
 bd = Client(
     token=api,
     base_url=url,
-    verify=trust  # TLS certificate verification
+    verify=verify  # TLS certificate verification
 )
 
 
