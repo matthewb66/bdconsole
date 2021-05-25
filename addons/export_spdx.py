@@ -11,13 +11,7 @@ import requests
 
 from blackduck import Client
 
-bd = Client(
-    token=os.environ.get('BLACKDUCK_API_TOKEN'),
-    base_url=os.environ.get('BLACKDUCK_URL'),
-    # verify=False  # TLS certificate verification
-)
-
-script_version = "0.22 Beta"
+script_version = "0.3 Beta"
 
 logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', stream=sys.stderr, level=logging.INFO)
 logging.getLogger("requests").setLevel(logging.WARNING)
@@ -113,8 +107,37 @@ parser.add_argument("-b", "--basic",
                     help='''Do not export copyright, download link  or package file data (speeds up processing - 
                     same as using "--download_loc --no_copyrights --no_files")''',
                     action='store_true')
+parser.add_argument("--blackduck_url", type=str, help="BLACKDUCK_URL", default="")
+parser.add_argument("--blackduck_api_token", type=str, help="BLACKDUCK_API_TOKEN", default="")
+parser.add_argument("--blackduck_trust_certs", help="BLACKDUCK trust certs", action='store_true')
 
 args = parser.parse_args()
+
+url = os.environ.get('BLACKDUCK_URL')
+if args.blackduck_url:
+    url = args.blackduck_url
+
+api = os.environ.get('BLACKDUCK_API_TOKEN')
+if args.blackduck_api_token:
+    api = args.blackduck_api_token
+
+trust = True
+if args.blackduck_trust_certs:
+    trust = False
+
+if url == '' or url is None:
+    print('BLACKDUCK_URL not set or specified as option --blackduck_url')
+    sys.exit(2)
+
+if api == '' or api is None:
+    print('BLACKDUCK_API_TOKEN not set or specified as option --blackduck_api_token')
+    sys.exit(2)
+
+bd = Client(
+    token=api,
+    base_url=url,
+    verify=trust  # TLS certificate verification
+)
 
 
 def clean_for_spdx(name):
@@ -433,7 +456,7 @@ def get_files(fcomp):
         if len(cfile) > 0:
             retfile = cfile[0]['filePath']['path']
 
-    for ext in ['.jar', '.ear', '.war', '.zip', '.gz', '.tar', '.xz', '.lz', '.bz2', '.7z', '.rar', '.rar', \
+    for ext in ['.jar', '.ear', '.war', '.zip', '.gz', '.tar', '.xz', '.lz', '.bz2', '.7z', '.rar', '.rar',
         '.cpio', '.Z', '.lz4', '.lha', '.arj', '.rpm', '.deb', '.dmg', '.gz', '.whl']:
         if retfile.endswith(ext):
             return retfile
@@ -631,7 +654,6 @@ def process_project(projspdxname, hcomps, bom):
                                                          bom_component['componentVersionName'])
 
                         process_project(subprojspdxname, sub_hierarchical_bom, sub_comps)
-
 
     return
 

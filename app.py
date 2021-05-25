@@ -1,6 +1,8 @@
 import json
 import sys
 import os
+import shutil
+
 # from time import time
 import dash
 import dash_bootstrap_components as dbc
@@ -94,6 +96,9 @@ app.layout = dbc.Container(
         dcc.Store(id='projname', storage_type='session'),
         dcc.Store(id='vername', storage_type='session'),
         dcc.Store(id='projverurl', storage_type='session'),
+        dcc.Store(id='bd_api', storage_type='session'),
+        dcc.Store(id='bd_url', storage_type='session'),
+        dcc.Store(id='bd_trust', storage_type='session'),
 
         # dcc.Store(id='allvulndata', storage_type='session'),
         # dcc.Store(id='allcompdata', storage_type='session'),
@@ -144,6 +149,21 @@ app.layout = dbc.Container(
                                         dbc.Input(type="text",
                                                   id="config_apikey",
                                                   placeholder="Enter API Token"),
+                                    ],
+                                    className="mr-3",
+                                ),
+                                dbc.FormGroup(
+                                    [
+                                        dbc.Label("SSL Certificates", className="mr-2"),
+                                        dcc.RadioItems(
+                                            options=[
+                                                {'label': 'Secure', 'value': 'SECURE'},
+                                                {'label': 'Ignore Certs', 'value': 'INSECURE'},
+                                            ],
+                                            value='SECURE',
+                                            # labelStyle={'display': 'inline-block'},
+                                            id="config_certs",
+                                        )
                                     ],
                                     className="mr-3",
                                 ),
@@ -335,9 +355,12 @@ def cb_vertable(row, verdata, projname):
         State('spdx_recursive', 'value'),
         State('projname', 'data'),
         State('vername', 'data'),
+        State('bd_url', 'data'),
+        State('bd_api', 'data'),
+        State('bd_trust', 'data'),
     ]
 )
-def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername):
+def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername, bd_url, bd_api, bd_trust):
     global spdx_proc
 
     if spdx_click is None and n == 0:
@@ -349,9 +372,22 @@ def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername):
         #                capture_output=True)
         outfile = os.path.join("SPDX", spdx_file)
         pyfile = os.path.join("addons", "export_spdx.py")
-        cmd = ["python3", pyfile, "-o", outfile, projname, vername]
+        if shutil.which("python3") is not None:
+            python_exe = 'python3'
+        elif shutil.which("python") is not None:
+            python_exe = 'python'
+        else:
+            return 'ERROR Python executable not found', True, 0, True
+
+        cmd = [python_exe, pyfile, "--blackduck_url", bd_url, "--blackduck_api_token", bd_api,
+               "-o", outfile, projname, vername]
+        print(cmd)
         if len(spdx_rec) > 0 and spdx_rec[0] == 1:
             cmd.append('--recursive')
+
+        if bd_trust:
+            cmd.append('--blackduck_trust_certs')
+
         spdx_proc = subprocess.Popen(cmd, close_fds=True)
         return 'Processing SPDX', False, n, False
     else:
@@ -528,30 +564,39 @@ def cb_downloadspdx(button, spdxfile):
         Output("config_collapse", 'is_open'),
         Output("projtable", "data"),
         Output("tab_projects", "label"),
+        Output("bd_url", "data"),
+        Output("bd_api", "data"),
+        Output("bd_trust", "data"),
     ],
     [
         Input('buttons_config_go', 'n_clicks'),
         State('config_server', 'value'),
         State('config_apikey', 'value'),
+        State('config_certs', 'value'),
     ]
 )
-def cb_configserver(button, server, apikey):
+def cb_configserver(button, bdserver, apikey, usecerts):
     global bd
 
     if button is None:
         raise dash.exceptions.PreventUpdate
 
+    if usecerts == 'INSECURE':
+        verify = False
+    else:
+        verify = True
+
     bd = Client(
         token=apikey,
-        base_url=server,
+        base_url=bdserver,
         timeout=300,
-        # verify=False  # TLS certificate verification
+        verify=verify  # TLS certificate verification
     )
 
     projdf = projs.get_project_data(bd)
     projlabel = "Projects (" + str(len(projdf.index)) + ")"
 
-    return False, projdf.to_dict('records'), projlabel
+    return False, projdf.to_dict('records'), projlabel, bdserver, apikey, verify
 
 
 if __name__ == '__main__':
