@@ -1,5 +1,5 @@
-import json
-import sys
+# import json
+# import sys
 import os
 import shutil
 
@@ -10,7 +10,7 @@ import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output, State
 import pandas as pd
-import dash_auth
+# import dash_auth
 import subprocess
 from dash_extensions.snippets import send_file
 
@@ -24,7 +24,6 @@ import actions
 
 from blackduck import Client
 import logging
-import os
 
 # from blackduck.HubRestApi import HubInstance
 # hub = HubInstance()
@@ -379,6 +378,9 @@ def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername, bd_url,
             python_exe = 'python'
         else:
             return 'ERROR Python executable not found', True, 0, True
+
+        if not os.path.exists('SPDX'):
+            os.makedirs('SPDX')
 
         cmd = ['python', pyfile, "--blackduck_url", bd_url, "--blackduck_api_token", bd_api,
                "-o", outfile, projname, vername]
