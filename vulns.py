@@ -277,8 +277,9 @@ def make_vuln_toast(message):
         key='toast_vuln',
         header="Vulnerability Processing",
         is_open=True,
-        dismissable=True,
+        dismissable=False,
         icon="info",
+        duration=10000,
     )
 
 

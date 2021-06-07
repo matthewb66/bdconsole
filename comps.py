@@ -23,7 +23,7 @@ def get_comps_data(bd, projverurl):
         df.loc[index, 'json'] = json.dumps(comp)
 
     print('Found ' + str(len(df.index)) + ' Components')
-    return df
+    return df, comps['items']
 
 
 col_data_comps = [
@@ -181,8 +181,9 @@ def make_comp_toast(message):
         key='toast_comp',
         header="Component Processing",
         is_open=True,
-        dismissable=True,
+        dismissable=False,
         icon="info",
+        duration=8000,
     )
 
 

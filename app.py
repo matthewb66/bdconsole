@@ -30,6 +30,7 @@ import logging
 
 bd = None
 vulns_json = ''
+comps_json = ''
 
 spdx_proc = None
 
@@ -105,7 +106,7 @@ app.layout = dbc.Container(
             children=[
                 dbc.NavItem(dbc.NavLink("Documentation", href="https://github.com/matthewb66/bdconsole")),
             ],
-            brand="Black Duck Project Console",
+            brand="Black Duck Batch API Console",
             # brand_href=hub.get_apibase(),
             color="primary",
             dark=True,
@@ -126,6 +127,10 @@ app.layout = dbc.Container(
         html.Div(
             id="toast-container-vuln",
             style={"position": "fixed", "top": 10, "right": 10, "width": 350},
+        ),
+        html.Div(
+            id="toast-container-connect",
+            style={"position": "fixed", "top": 10, "right": 10, "width": 500},
         ),
         dbc.Row(
             dbc.Col(
@@ -278,7 +283,7 @@ def cb_projtable(row, vprojdata):
         Output("tab_trend", "disabled"),     # 11
         Output("tab_trend", "children"),     # 12
         Output("tab_actions", "disabled"),          # ACTIONS tab
-        Output("spdxtitle", "children"),            # ACTIONS tab
+        Output("actions_projver", "children"),      # ACTIONS tab
         Output("spdx_file", "value"),               # ACTIONS tab
         Output('vername', 'data'),           # 13
         Output('projverurl', 'data'),        # 14
@@ -296,6 +301,7 @@ def cb_projtable(row, vprojdata):
 )
 def cb_vertable(row, verdata, projname):
     global bd
+    global comps_json
     global vulns_json
 
     if row is None or len(row) < 1:
@@ -303,7 +309,7 @@ def cb_vertable(row, verdata, projname):
 
     vername = verdata[row[0]]['versionName']
     projverurl = str(verdata[row[0]]['_meta.href'])
-    df_comp_new = comps.get_comps_data(bd, projverurl)
+    df_comp_new, comps_json = comps.get_comps_data(bd, projverurl)
     if df_comp_new is None:
         toast = vers.make_ver_toast('Unable to get components - check permissions')
         return '', \
@@ -318,7 +324,7 @@ def cb_vertable(row, verdata, projname):
     snippetdata, snipcount = snippets.get_snippets_data(bd, projverurl)
 
     spdx_file = "SPDX_" + projname.replace(' ', '-') + '-' + vername.replace(' ', '-') + ".json"
-    spdxcardlabel = 'Project: ' + projname + ' - Version: ' + vername
+    action_projver = html.H4('Project: ' + projname + ' - Version: ' + vername)
 
     return vers.create_vercard(verdata[row[0]], df_comp_new, vername, projname), \
         comps.create_compstab(df_comp_new, projname, vername), False, "Components (" + \
@@ -327,7 +333,7 @@ def cb_vertable(row, verdata, projname):
         "Vulnerabilities (" + str(len(df_vuln.index)) + ")", \
         snippets.create_snippetstab(snippetdata, projname, vername), False, "Snippets (" + str(snipcount) + ")", \
         False, trend.create_trendtab(projname, vername, '', ''), \
-        False, spdxcardlabel, spdx_file, vername, projverurl, ''
+        False, action_projver, spdx_file, vername, projverurl, ''
     # comptabstr = "Components (" + str(len(df_comp_new.index)) + ")"
     # vulntabstr = "Vulnerabilities (" + str(len(df_vuln.index)) + ")"
     # sniptabstr = "Snippets (" + str(snipcount) + ")"
@@ -401,6 +407,28 @@ def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername, bd_url,
             return 'Export Complete', True, 0, True
         else:
             return 'Processing SPDX', False, n, False
+
+
+@app.callback(
+    Output('fixcves_status', 'children'),
+    [
+        Input('buttons_fixcves', 'n_clicks'),
+        State('projverurl', 'data'),
+        State('projname', 'data'),
+        State('vername', 'data'),
+    ]
+)
+def cb_fixcvesbutton(click, projverurl, projname, vername):
+    global comps_json
+    global vulns_json
+
+    if click is None:
+        print('NO ACTION')
+        raise dash.exceptions.PreventUpdate
+
+    num = actions.check_cves(bd, projverurl, comps_json, vulns_json)
+
+    return '{} CVEs Ignored'.format(num)
 
 
 @app.callback(
@@ -562,6 +590,23 @@ def cb_downloadspdx(button, spdxfile):
     return send_file(filepath)
 
 
+def make_connect_toast(message):
+    """
+    Helper function for making a toast. dict id for use in pattern matching
+    callbacks.
+    """
+    return dbc.Toast(
+        message,
+        id={"type": "toast", "id": "toast_connect"},
+        key='toast_connect',
+        header="Black Duck Server Connection",
+        is_open=True,
+        dismissable=True,
+        icon="info",
+        style={"maxWidth": "500px"},
+    )
+
+
 @app.callback(
     [
         Output("config_collapse", 'is_open'),
@@ -570,6 +615,7 @@ def cb_downloadspdx(button, spdxfile):
         Output("bd_url", "data"),
         Output("bd_api", "data"),
         Output("bd_trust", "data"),
+        Output("toast-container-connect", "children"),
     ],
     [
         Input('buttons_config_go', 'n_clicks'),
@@ -595,11 +641,16 @@ def cb_configserver(button, bdserver, apikey, usecerts):
         timeout=300,
         verify=verify  # TLS certificate verification
     )
+    try:
+        bd.list_resources()
+    except Exception as exc:
+        toast = make_connect_toast('Unable to eonnect - {}'.format(str(exc)))
+        return True, None, '', '', '', False, toast
 
     projdf = projs.get_project_data(bd)
     projlabel = "Projects (" + str(len(projdf.index)) + ")"
 
-    return False, projdf.to_dict('records'), projlabel, bdserver, apikey, verify
+    return False, projdf.to_dict('records'), projlabel, bdserver, apikey, verify, ''
 
 
 if __name__ == '__main__':
