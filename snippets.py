@@ -136,14 +136,14 @@ def create_snippetstab(snippetcsv, projname, vername):
 def get_snippet_entries(bd, path):
     paramstring = "?filter=bomMatchReviewStatus%3Anot_reviewed&filter=bomMatchType%3Asnippet&offset=0&limit=5000"
 
-    print(path)
+    # print(path)
     # Using internal API - see https://jira.dc1.lan/browse/HUB-18270: Make snippet API calls for ignoring,
     # confirming snippet matches public
     splits = path.split('/')
     # "{}/internal/projects/{}/versions/{}/source-bom-entries"
     url = "{}/api/internal/projects/{}/versions/{}/source-bom-entries".format('/'.join(splits[:3]), splits[5], splits[7]) \
           + paramstring
-    print(url)
+    # print(url)
     # response = hub.execute_get(url)
     # if response.ok:
     #     return response.json()
@@ -226,8 +226,9 @@ def make_snip_toast(message):
         key='toast_snip',
         header="Snippet Processing",
         is_open=True,
-        dismissable=True,
+        dismissable=False,
         icon="info",
+        duration=8000,
     )
 
 

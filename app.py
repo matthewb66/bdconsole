@@ -1,6 +1,8 @@
-import json
-import sys
-# import os
+# import json
+# import sys
+import os
+import shutil
+
 # from time import time
 import dash
 import dash_bootstrap_components as dbc
@@ -8,7 +10,7 @@ import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output, State
 import pandas as pd
-import dash_auth
+# import dash_auth
 import subprocess
 from dash_extensions.snippets import send_file
 
@@ -18,17 +20,17 @@ import comps
 import vulns
 import vers
 import projs
-# import actions
+import actions
 
 from blackduck import Client
 import logging
-import os
 
 # from blackduck.HubRestApi import HubInstance
 # hub = HubInstance()
 
 bd = None
 vulns_json = ''
+comps_json = ''
 
 spdx_proc = None
 
@@ -94,6 +96,9 @@ app.layout = dbc.Container(
         dcc.Store(id='projname', storage_type='session'),
         dcc.Store(id='vername', storage_type='session'),
         dcc.Store(id='projverurl', storage_type='session'),
+        dcc.Store(id='bd_api', storage_type='session'),
+        dcc.Store(id='bd_url', storage_type='session'),
+        dcc.Store(id='bd_trust', storage_type='session'),
 
         # dcc.Store(id='allvulndata', storage_type='session'),
         # dcc.Store(id='allcompdata', storage_type='session'),
@@ -101,7 +106,7 @@ app.layout = dbc.Container(
             children=[
                 dbc.NavItem(dbc.NavLink("Documentation", href="https://github.com/matthewb66/bdconsole")),
             ],
-            brand="Black Duck Project Console",
+            brand="Black Duck Batch API Console",
             # brand_href=hub.get_apibase(),
             color="primary",
             dark=True,
@@ -122,6 +127,10 @@ app.layout = dbc.Container(
         html.Div(
             id="toast-container-vuln",
             style={"position": "fixed", "top": 10, "right": 10, "width": 350},
+        ),
+        html.Div(
+            id="toast-container-connect",
+            style={"position": "fixed", "top": 10, "right": 10, "width": 500},
         ),
         dbc.Row(
             dbc.Col(
@@ -144,6 +153,21 @@ app.layout = dbc.Container(
                                         dbc.Input(type="text",
                                                   id="config_apikey",
                                                   placeholder="Enter API Token"),
+                                    ],
+                                    className="mr-3",
+                                ),
+                                dbc.FormGroup(
+                                    [
+                                        dbc.Label("SSL Certificates", className="mr-2"),
+                                        dcc.RadioItems(
+                                            options=[
+                                                {'label': 'Secure', 'value': 'SECURE'},
+                                                {'label': 'Ignore Certs', 'value': 'INSECURE'},
+                                            ],
+                                            value='SECURE',
+                                            # labelStyle={'display': 'inline-block'},
+                                            id="config_certs",
+                                        )
                                     ],
                                     className="mr-3",
                                 ),
@@ -193,12 +217,12 @@ app.layout = dbc.Container(
                                 tab_id="tab_trend", id="tab_trend",
                                 disabled=True,
                             ),
-                            # dbc.Tab(  # ACTIONS TAB
-                            #     actions.create_actions_tab('', ''),
-                            #     label="Actions",
-                            #     tab_id="tab_actions", id="tab_actions",
-                            #     disabled=True,
-                            # ),
+                            dbc.Tab(  # ACTIONS TAB
+                                actions.create_actions_tab('', ''),
+                                label="Actions",
+                                tab_id="tab_actions", id="tab_actions",
+                                disabled=True,
+                            ),
                         ],
                         id="tabs",
                         active_tab='tab_projects',
@@ -258,9 +282,9 @@ def cb_projtable(row, vprojdata):
         Output("tab_snippets", "label"),     # 10
         Output("tab_trend", "disabled"),     # 11
         Output("tab_trend", "children"),     # 12
-        # Output("tab_actions", "disabled"),          # ACTIONS tab
-        # Output("spdxtitle", "children"),            # ACTIONS tab
-        # Output("spdx_file", "value"),               # ACTIONS tab
+        Output("tab_actions", "disabled"),          # ACTIONS tab
+        Output("actions_projver", "children"),      # ACTIONS tab
+        Output("spdx_file", "value"),               # ACTIONS tab
         Output('vername', 'data'),           # 13
         Output('projverurl', 'data'),        # 14
         # Output('allcompdata', 'data'),
@@ -277,6 +301,7 @@ def cb_projtable(row, vprojdata):
 )
 def cb_vertable(row, verdata, projname):
     global bd
+    global comps_json
     global vulns_json
 
     if row is None or len(row) < 1:
@@ -284,7 +309,7 @@ def cb_vertable(row, verdata, projname):
 
     vername = verdata[row[0]]['versionName']
     projverurl = str(verdata[row[0]]['_meta.href'])
-    df_comp_new = comps.get_comps_data(bd, projverurl)
+    df_comp_new, comps_json = comps.get_comps_data(bd, projverurl)
     if df_comp_new is None:
         toast = vers.make_ver_toast('Unable to get components - check permissions')
         return '', \
@@ -292,74 +317,118 @@ def cb_vertable(row, verdata, projname):
             '', True, '', \
             '', True, '', \
             True, '', \
-            vername, projverurl, ''
+            vername, projverurl, toast
 
     df_vuln, vulns_json = vulns.get_vulns_data(bd, projverurl)
 
     snippetdata, snipcount = snippets.get_snippets_data(bd, projverurl)
 
     spdx_file = "SPDX_" + projname.replace(' ', '-') + '-' + vername.replace(' ', '-') + ".json"
-    spdxcardlabel = 'Project: ' + projname + ' - Version: ' + vername
-
-    # return vers.create_vercard(verdata[row[0]], df_comp_new, vername, projname), \
-    #     comps.create_compstab(df_comp_new, projname, vername), False, "Components (" + \
-    #     str(len(df_comp_new.index)) + ")", \
-    #     vulns.create_vulnstab(df_vuln, projname, vername), False, \
-    #     "Vulnerabilities (" + str(len(df_vuln.index)) + ")", \
-    #     snippets.create_snippetstab(snippetdata, projname, vername), False, "Snippets (" + str(snipcount) + ")", \
-    #     False, trend.create_trendtab(projname, vername, '', ''), \
-    #     False, spdxcardlabel, spdx_file, vername, projverurl, ''
-    comptabstr = "Components (" + str(len(df_comp_new.index)) + ")"
-    vulntabstr = "Vulnerabilities (" + str(len(df_vuln.index)) + ")"
-    sniptabstr = "Snippets (" + str(snipcount) + ")"
+    action_projver = html.H4('Project: ' + projname + ' - Version: ' + vername)
 
     return vers.create_vercard(verdata[row[0]], df_comp_new, vername, projname), \
-        comps.create_compstab(df_comp_new, projname, vername), False, comptabstr, \
-        vulns.create_vulnstab(df_vuln, projname, vername), False, vulntabstr, \
-        snippets.create_snippetstab(snippetdata, projname, vername), False, sniptabstr, \
+        comps.create_compstab(df_comp_new, projname, vername), False, "Components (" + \
+        str(len(df_comp_new.index)) + ")", \
+        vulns.create_vulnstab(df_vuln, projname, vername), False, \
+        "Vulnerabilities (" + str(len(df_vuln.index)) + ")", \
+        snippets.create_snippetstab(snippetdata, projname, vername), False, "Snippets (" + str(snipcount) + ")", \
         False, trend.create_trendtab(projname, vername, '', ''), \
-        vername, projverurl, ''
+        False, action_projver, spdx_file, vername, projverurl, ''
+    # comptabstr = "Components (" + str(len(df_comp_new.index)) + ")"
+    # vulntabstr = "Vulnerabilities (" + str(len(df_vuln.index)) + ")"
+    # sniptabstr = "Snippets (" + str(snipcount) + ")"
+    #
+    # return vers.create_vercard(verdata[row[0]], df_comp_new, vername, projname), \
+    #     comps.create_compstab(df_comp_new, projname, vername), False, comptabstr, \
+    #     vulns.create_vulnstab(df_vuln, projname, vername), False, vulntabstr, \
+    #     snippets.create_snippetstab(snippetdata, projname, vername), False, sniptabstr, \
+    #     False, trend.create_trendtab(projname, vername, '', ''), \
+    #     vername, projverurl, ''
 
 
-# @app.callback(
-#     [
-#         Output('spdx_status', 'children'),
-#         Output('spdx_interval', 'disabled'),
-#         Output('spdx_interval', 'n_intervals'),
-#         Output('spdx_collapse', 'is_open'),
-#     ],
-#     [
-#         Input('buttons_export_spdx', 'n_clicks'),
-#         Input('spdx_interval', 'n_intervals'),
-#         State('spdx_file', 'value'),
-#         State('spdx_recursive', 'value'),
-#         State('projname', 'data'),
-#         State('vername', 'data'),
-#     ]
-# )
-# def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername):
-#     global spdx_proc
-#
-#     if spdx_click is None and n == 0:
-#         print('NO ACTION')
-#         raise dash.exceptions.PreventUpdate
-#
-#     if n <= 0:
-#         # subprocess.run(["python3", "export_spdx.py", "-o", spdx_file, projname, vername],
-#         #                capture_output=True)
-#         cmd = ["python3", "addons/export_spdx.py", "-o", "SPDX/" + spdx_file, projname, vername]
-#         if len(spdx_rec) > 0 and spdx_rec[0] == 1:
-#             cmd.append('--recursive')
-#         spdx_proc = subprocess.Popen(cmd, close_fds=True)
-#         return 'Processing SPDX', False, n, False
-#     else:
-#         print("Polling SPDX process")
-#         spdx_proc.poll()
-#         ret = spdx_proc.returncode
-#         if ret is not None:
-#             return 'Export Complete', True, 0, True
-#         else:
-#             return 'Processing SPDX', False, n, False
+@app.callback(
+    [
+        Output('spdx_status', 'children'),
+        Output('spdx_interval', 'disabled'),
+        Output('spdx_interval', 'n_intervals'),
+        Output('spdx_collapse', 'is_open'),
+    ],
+    [
+        Input('buttons_export_spdx', 'n_clicks'),
+        Input('spdx_interval', 'n_intervals'),
+        State('spdx_file', 'value'),
+        State('spdx_recursive', 'value'),
+        State('projname', 'data'),
+        State('vername', 'data'),
+        State('bd_url', 'data'),
+        State('bd_api', 'data'),
+        State('bd_trust', 'data'),
+    ]
+)
+def cb_spdxbutton(spdx_click, n, spdx_file, spdx_rec, projname, vername, bd_url, bd_api, bd_trust):
+    global spdx_proc
+
+    if spdx_click is None and n == 0:
+        print('NO ACTION')
+        raise dash.exceptions.PreventUpdate
+
+    if n <= 0:
+        # subprocess.run(["python3", "export_spdx.py", "-o", spdx_file, projname, vername],
+        #                capture_output=True)
+        outfile = os.path.join("SPDX", spdx_file)
+        pyfile = os.path.join("addons", "export_spdx.py")
+        print(shutil.which("python3"))
+        if shutil.which("python3") is not None:
+            python_exe = 'python3'
+        elif shutil.which("python") is not None:
+            python_exe = 'python'
+        else:
+            return 'ERROR Python executable not found', True, 0, True
+
+        if not os.path.exists('SPDX'):
+            os.makedirs('SPDX')
+
+        cmd = ['python', pyfile, "--blackduck_url", bd_url, "--blackduck_api_token", bd_api,
+               "-o", outfile, projname, vername]
+        print(cmd)
+        if len(spdx_rec) > 0 and spdx_rec[0] == 1:
+            cmd.append('--recursive')
+
+        if bd_trust:
+            cmd.append('--blackduck_trust_certs')
+
+        spdx_proc = subprocess.Popen(cmd, close_fds=True)
+        return 'Processing SPDX', False, n, False
+    else:
+        print("Polling SPDX process")
+        spdx_proc.poll()
+        ret = spdx_proc.returncode
+        if ret is not None:
+            return 'Export Complete', True, 0, True
+        else:
+            return 'Processing SPDX', False, n, False
+
+
+@app.callback(
+    Output('fixcves_status', 'children'),
+    [
+        Input('buttons_fixcves', 'n_clicks'),
+        State('projverurl', 'data'),
+        State('projname', 'data'),
+        State('vername', 'data'),
+    ]
+)
+def cb_fixcvesbutton(click, projverurl, projname, vername):
+    global comps_json
+    global vulns_json
+
+    if click is None:
+        print('NO ACTION')
+        raise dash.exceptions.PreventUpdate
+
+    num = actions.check_cves(bd, projverurl, comps_json, vulns_json)
+
+    return '{} CVEs Ignored'.format(num)
 
 
 @app.callback(
@@ -504,21 +573,38 @@ def cb_trend(button, purl, vername):
     return dcc.Graph(figure=compfig, id='fig_time_trend'), dcc.Graph(figure=vulnfig, id='fig_time_trend')
 
 
-# @app.callback(
-#     Output("download_spdx", "data"),
-#     [
-#         Input('button_download_spdx', 'n_clicks'),
-#         State('spdx_file', 'value'),
-#     ]
-# )
-# def cb_downloadspdx(button, spdxfile):
-#
-#     if button is None:
-#         raise dash.exceptions.PreventUpdate
-#
-#     filepath = 'SPDX/' + spdxfile
-#
-#     return send_file(filepath)
+@app.callback(
+    Output("download_spdx", "data"),
+    [
+        Input('button_download_spdx', 'n_clicks'),
+        State('spdx_file', 'value'),
+    ]
+)
+def cb_downloadspdx(button, spdxfile):
+
+    if button is None:
+        raise dash.exceptions.PreventUpdate
+
+    filepath = os.path.join('SPDX', spdxfile)
+
+    return send_file(filepath)
+
+
+def make_connect_toast(message):
+    """
+    Helper function for making a toast. dict id for use in pattern matching
+    callbacks.
+    """
+    return dbc.Toast(
+        message,
+        id={"type": "toast", "id": "toast_connect"},
+        key='toast_connect',
+        header="Black Duck Server Connection",
+        is_open=True,
+        dismissable=True,
+        icon="info",
+        style={"maxWidth": "500px"},
+    )
 
 
 @app.callback(
@@ -526,30 +612,45 @@ def cb_trend(button, purl, vername):
         Output("config_collapse", 'is_open'),
         Output("projtable", "data"),
         Output("tab_projects", "label"),
+        Output("bd_url", "data"),
+        Output("bd_api", "data"),
+        Output("bd_trust", "data"),
+        Output("toast-container-connect", "children"),
     ],
     [
         Input('buttons_config_go', 'n_clicks'),
         State('config_server', 'value'),
         State('config_apikey', 'value'),
+        State('config_certs', 'value'),
     ]
 )
-def cb_configserver(button, server, apikey):
+def cb_configserver(button, bdserver, apikey, usecerts):
     global bd
 
     if button is None:
         raise dash.exceptions.PreventUpdate
 
+    if usecerts == 'INSECURE':
+        verify = False
+    else:
+        verify = True
+
     bd = Client(
         token=apikey,
-        base_url=server,
+        base_url=bdserver,
         timeout=300,
-        # verify=False  # TLS certificate verification
+        verify=verify  # TLS certificate verification
     )
+    try:
+        bd.list_resources()
+    except Exception as exc:
+        toast = make_connect_toast('Unable to eonnect - {}'.format(str(exc)))
+        return True, None, '', '', '', False, toast
 
     projdf = projs.get_project_data(bd)
     projlabel = "Projects (" + str(len(projdf.index)) + ")"
 
-    return False, projdf.to_dict('records'), projlabel
+    return False, projdf.to_dict('records'), projlabel, bdserver, apikey, verify, ''
 
 
 if __name__ == '__main__':

@@ -9,8 +9,17 @@ def remove_vulns(vuln_comp_dict, component, vuln_list):
     if component in vuln_comp_dict.values():
         for vuln in vuln_comp_dict.keys():
             if vuln_comp_dict[vuln] == component and vuln in vuln_list:
-                print("Vulnerability REMOVED: {} (due to component {} being REMOVED)".format(vuln, component))
+                print("Vulnerability REMOVED: {} (due to component {} being REMOVED/IGNORED)".format(vuln, component))
                 vuln_list.remove(vuln)
+    return vuln_list
+
+
+def add_vulns(vuln_comp_dict, component, vuln_list):
+    if component in vuln_comp_dict.values():
+        for vuln in vuln_comp_dict.keys():
+            if vuln_comp_dict[vuln] == component and vuln in vuln_list:
+                print("Vulnerability ADDED: {} (due to component {} being UNIGNORED)".format(vuln, component))
+                vuln_list.append(vuln)
     return vuln_list
 
 
@@ -79,6 +88,17 @@ def proc_events(eventlist):
                     evtype = 'comp'
                     print("Component IGNORED: {} (total = {})".format(event['comp'], len(comp_dict),
                                                                       event['timestamp']))
+                    vuln_list = remove_vulns(vuln_comp_dict, event['comp'], vuln_list)
+        elif event['type'] == 'COMP_UNIGNORED':
+            if event['comp'] not in comp_dict.keys():
+                if event['comp'] not in comp_dict:
+                    comp_dict[event['comp']] = 1
+                    comp_ignored_list.remove(event['comp'])
+                    evtype = 'comp'
+                    print("Component UNIGNORED: {} (total = {})".format(event['comp'], len(comp_dict),
+                                                                      event['timestamp']))
+                    vuln_list = add_vulns(vuln_comp_dict, event['comp'], vuln_list)
+
 
         if evtype == 'comp':
             timelist_comps.append({'timestamp': event['timestamp'], 'Components': len(comp_dict),
@@ -237,7 +257,7 @@ def proc_journals(bd, projverurl, pjvername):
 
     # Need to check that this project has project propagation first
     #
-    headers = {'Accept': 'application/vnd.blackducksoftware.project-detail-4+json'}
+    # headers = {'Accept': 'application/vnd.blackducksoftware.project-detail-4+json'}
 
     arr = projverurl.split('/')
     projurl = "{}/api/projects/{}".format('/'.join(arr[:3]), arr[5])
@@ -270,11 +290,14 @@ def proc_journals(bd, projverurl, pjvername):
                     compname = event['objectData']['name'] + "/" + event['currentData']['releaseVersion']
                 else:
                     compname = event['objectData']['name']
-                events.append({'timestamp': event['timestamp'], 'type': 'IGNORED', 'comp': compname})
+                ctype = ''
+                if event['action'] == 'Adjustment Added':
+                    ctype = 'COMP_IGNORED'
+                elif event['action'] == 'Adjustment Deleted':
+                    ctype = 'COMP_UNIGNORED'
+                events.append({'timestamp': event['timestamp'], 'type': ctype, 'comp': compname})
                 # print('COMP_IGNORED')
             # print(event['timestamp'] + ": ", event['currentData'])
-
-    print()
 
     def my_sort(e):
         return e['timestamp']
@@ -315,31 +338,35 @@ def create_fig_compstimeline(compevents, scans):
 
 
 def create_trendtab(projname, vername, graph1, graph2):
-    return dbc.Row(
-        dbc.Col(
-            [
-                dbc.Row(
-                    dbc.Col(
-                        [
-                            html.H4('Project :' + projname + ' - Version: ' + vername),
-                            dbc.Button("Create Trend", id="button_trend",
-                                       className="mr-2", size='sm'),
-                        ],
-                        width=12
-                    ),
-                ),
-                dbc.Row(
-                    dbc.Col(
-                        [
-                            html.Div(children=[graph1], id='compgraph'),
-                            html.Div(children=[graph2], id='vulngraph'),
-                        ], width=12
-                    )
-                ),
-            ],
+    return [
+        dbc.Row(
+            dbc.Col(html.H2("Project Version Trend")),
         ),
-    ),
-
+        dbc.Row(
+            dbc.Col(
+                [
+                    dbc.Row(
+                        dbc.Col(
+                            [
+                                html.H4('Project :' + projname + ' - Version: ' + vername),
+                                dbc.Button("Create Trend", id="button_trend",
+                                           className="mr-2", size='sm'),
+                            ],
+                            width=12
+                        ),
+                    ),
+                    dbc.Row(
+                        dbc.Col(
+                            [
+                                html.Div(children=[graph1], id='compgraph'),
+                                html.Div(children=[graph2], id='vulngraph'),
+                            ], width=12
+                        )
+                    ),
+                ],
+            ),
+        ),
+    ]
 
 def create_fig_vulnstimeline(vulnevents, scans):
     df = pd.DataFrame(vulnevents)
