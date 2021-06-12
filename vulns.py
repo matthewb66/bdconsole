@@ -60,6 +60,13 @@ def create_vulnstab(vulndata, projname, vername):
     global col_data_vulns
 
     return [
+        dcc.Interval(
+            id='vulns_interval',
+            disabled=True,
+            interval=1 * 6000,  # in milliseconds
+            n_intervals=0,
+            max_intervals=400
+        ),
         dbc.Row(
             dbc.Col(html.H2("Vulnerabilities")),
         ),

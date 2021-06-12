@@ -754,7 +754,10 @@ def get_bom_components(ver):
     bom_comps = bd.get_resource('components', parent=ver)
     bom_comp_dict = {}
     for comp in bom_comps:
+        if 'componentVersion' not in comp:
+            continue
         compver = comp['componentVersion']
+
         bom_comp_dict[compver] = comp
 
     return bom_comps
