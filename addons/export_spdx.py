@@ -11,7 +11,7 @@ import requests
 
 from blackduck import Client
 
-script_version = "0.3 Beta"
+script_version = "0.4 Beta"
 
 logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', stream=sys.stderr, level=logging.INFO)
 logging.getLogger("requests").setLevel(logging.WARNING)
@@ -625,8 +625,6 @@ def process_project(projspdxname, hcomps, bom):
                 print(
                     "INFO: Skipping component {} which has no assigned version".format(bom_component['componentName']))
                 continue
-            else:
-                print("{}/{}".format(bom_component['componentName'], bom_component['componentVersionName']))
 
             print(bom_component['componentName'] + "/" + bom_component['componentVersionName'])
             pkgname = process_comp(bom_component)
@@ -647,13 +645,33 @@ def process_project(projspdxname, hcomps, bom):
                         print("Processing project within project '{}'".format(
                             bom_component['componentName'] + '/' + bom_component['componentVersionName']))
 
-                        sub_comps = bd.get_resource('components', parent=sub_ver)
-                        sub_hierarchical_bom = bd.get_resource('hierarchical-components', parent=version)
+                        res = bd.list_resources(parent=sub_ver)
+                        if 'components' in res:
+                            sub_comps = bd.get_resource('components', parent=sub_ver)
+                        else:
+                            thishref = res['href'] + "/components?limit=2000"
+                            headers = {
+                                'accept': "application/vnd.blackducksoftware.bill-of-materials-6+json",
+                            }
+                            res2 = bd.get_json(thishref, headers=headers)
+                            sub_comps = res2['items']
+
+                        if 'hierarchical-components' in res:
+                            sub_hierarchical_bom = bd.get_resource('hierarchical-components', parent=sub_ver)
+                        else:
+                            thishref = res['href'] + "/hierarchical-components?limit=2000"
+                            headers = {
+                                'accept': "application/vnd.blackducksoftware.bill-of-materials-6+json",
+                            }
+                            res2 = bd.get_json(thishref, headers=headers)
+                            sub_hierarchical_bom = res2['items']
 
                         subprojspdxname = clean_for_spdx(bom_component['componentName'] + '/' +
                                                          bom_component['componentVersionName'])
 
                         process_project(subprojspdxname, sub_hierarchical_bom, sub_comps)
+                        break
+                    break
 
     return
 
@@ -751,7 +769,16 @@ def check_projver(pargs):
 def get_bom_components(ver):
     global bom_comp_dict
 
-    bom_comps = bd.get_resource('components', parent=ver)
+    res = bd.list_resources(ver)
+    if 'components' not in res:
+        thishref = res['href'] + "/components?limit=2000"
+        headers = {
+            'accept': "application/vnd.blackducksoftware.bill-of-materials-6+json",
+        }
+        res = bd.get_json(thishref, headers=headers)
+        bom_comps = res['items']
+    else:
+        bom_comps = bd.get_resource('components', parent=ver)
     bom_comp_dict = {}
     for comp in bom_comps:
         if 'componentVersion' not in comp:
@@ -845,9 +872,10 @@ processed_comp_list = []
 
 if 'hierarchical-components' in bd.list_resources(version):
     hierarchical_bom = bd.get_resource('hierarchical-components', parent=version)
+else:
+    hierarchical_bom = []
 
-    print('Getting Component Hierarchy:')
-    process_project(toppackage, hierarchical_bom, bom_components)
+process_project(toppackage, hierarchical_bom, bom_components)
 
 print("Done\n\nWriting SPDX output file {} ... ".format(args.output), end='')
 

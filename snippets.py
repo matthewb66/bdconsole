@@ -6,6 +6,7 @@ import dash_core_components as dcc
 import dash_bootstrap_components as dbc
 import dash_html_components as html
 import dash_table
+import requests
 
 
 col_data_snippets = [
@@ -141,15 +142,18 @@ def get_snippet_entries(bd, path):
     # confirming snippet matches public
     splits = path.split('/')
     # "{}/internal/projects/{}/versions/{}/source-bom-entries"
-    url = "{}/api/internal/projects/{}/versions/{}/source-bom-entries".format('/'.join(splits[:3]), splits[5], splits[7]) \
-          + paramstring
+    url = "{}/api/internal/projects/{}/versions/{}/source-bom-entries".format('/'.join(splits[:3]), splits[5],
+                                                                              splits[7]) + paramstring
     # print(url)
     # response = hub.execute_get(url)
     # if response.ok:
     #     return response.json()
     # else:
     #     return {}
-    snipjson = bd.get_json(url)
+    try:
+        snipjson = bd.get_json(url)
+    except requests.exceptions.HTTPError:
+        return ''
     return snipjson
 
 
