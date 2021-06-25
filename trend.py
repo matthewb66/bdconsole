@@ -96,9 +96,8 @@ def proc_events(eventlist):
                     comp_ignored_list.remove(event['comp'])
                     evtype = 'comp'
                     print("Component UNIGNORED: {} (total = {})".format(event['comp'], len(comp_dict),
-                                                                      event['timestamp']))
+                                                                        event['timestamp']))
                     vuln_list = add_vulns(vuln_comp_dict, event['comp'], vuln_list)
-
 
         if evtype == 'comp':
             timelist_comps.append({'timestamp': event['timestamp'], 'Components': len(comp_dict),
@@ -367,6 +366,7 @@ def create_trendtab(projname, vername, graph1, graph2):
             ),
         ),
     ]
+
 
 def create_fig_vulnstimeline(vulnevents, scans):
     df = pd.DataFrame(vulnevents)
