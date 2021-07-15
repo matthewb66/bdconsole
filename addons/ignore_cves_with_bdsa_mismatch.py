@@ -1,29 +1,36 @@
 #!/usr/bin/env python
 
 import argparse
-import json
+# import json
+import sys
 
 from blackduck.HubRestApi import HubInstance
 
-parser = argparse.ArgumentParser(description='Ignore potentially false positive CVEs with associated BDSAs which disagree on the affected component versions within a Black Duck project version', prog='ignore_cves_with_bdsa_mismatch.py')
+parser = argparse.ArgumentParser(description='''Ignore potentially false positive CVEs with associated BDSAs which 
+	disagree on the affected component versions within a Black Duck project version''',
+								prog='ignore_cves_with_bdsa_mismatch.py')
 parser.add_argument("project_name", type=str, help='Black Duck project name')
 parser.add_argument("project_version", type=str, help='Black Duck version name')
-parser.add_argument("-l", "--list", help="List potential False Positive CVEs - do not marked as ignored",action='store_true')
+parser.add_argument("-l", "--list", help="List potential False Positive CVEs - do not marked as ignored",
+					action='store_true')
 
 args = parser.parse_args()
 
+
 def list_projects(project_string):
 	print("Available projects matching '{}':".format(project_string))
-	projs = hub.get_projects(parameters={"q":"name:{}".format(project_string)})
+	projs = hub.get_projects(parameters={"q": "name:{}".format(project_string)})
 	for proj in projs['items']:
 		print(" - " + proj['name'])
+
 
 def get_all_projects():
 	projs = hub.get_projects()
 	proj_list = []
 	for proj in projs['items']:
 		proj_list.append(proj['name'])
-	return(proj_list)
+	return proj_list
+
 
 def list_versions(version_string):
 	print("Available versions:")
@@ -31,15 +38,16 @@ def list_versions(version_string):
 	for ver in vers['items']:
 		print(" - " + ver['versionName'])
 
+
 def patch_cves(version, vuln_list):
 	global args
 
 	vulnerable_components_url = hub.get_link(version, "vulnerable-components") + "?limit=9999"
-	custom_headers = {'Accept':'application/vnd.blackducksoftware.bill-of-materials-6+json'}
+	custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-6+json'}
 	response = hub.execute_get(vulnerable_components_url, custom_headers=custom_headers)
 	vulnerable_bom_components = response.json().get('items', [])
 
-	active_statuses = [ "NEW", "NEEDS_REVIEW", "REMEDIATION_REQUIRED"]
+	active_statuses = ["NEW", "NEEDS_REVIEW", "REMEDIATION_REQUIRED"]
 	status = "IGNORED"
 	comment = "Ignored as linked BDSA has component version as fixed"
 
@@ -73,16 +81,17 @@ def patch_cves(version, vuln_list):
 	print("- {} CVEs newly marked as ignored".format(ignoredcount))
 	return()
 
+
 hub = HubInstance()
 
 project = hub.get_project_by_name(args.project_name)
-if project == None:
+if project is None:
 	print("Project '{}' does not exist".format(args.project_name))
 	list_projects(args.project_name)
 	sys.exit(2)
 
 version = hub.get_version_by_name(project, args.project_version)
-if version == None:
+if version is None:
 	print("Version '{}' does not exist".format(args.project_version))
 	list_versions(args.project_version)
 	sys.exit(2)
@@ -95,7 +104,7 @@ project_id = project['_meta']['href'].split("/")[-1]
 version_id = version['_meta']['href'].split("/")[-1]
 
 components_url = hub.get_apibase() + "/projects/" + project_id + "/versions/" + version_id + "/components?limit=9999"
-custom_headers = {'Accept':'application/vnd.blackducksoftware.bill-of-materials-4+json'}
+custom_headers = {'Accept': 'application/vnd.blackducksoftware.bill-of-materials-4+json'}
 response = hub.execute_get(components_url, custom_headers=custom_headers)
 components = response.json().get('items', [])
 
@@ -105,19 +114,19 @@ num = 0
 total = 0
 print("Processing components:")
 for comp in components:
-# 	print(comp)
+	# print(comp)
 	print("- " + comp['componentName'] + '/' + comp['componentVersionName'])
 	for x in comp['_meta']['links']:
 		if x['rel'] == 'vulnerabilities':
-			custom_headers = {'Accept':'application/vnd.blackducksoftware.vulnerability-4+json'}
+			custom_headers = {'Accept': 'application/vnd.blackducksoftware.vulnerability-4+json'}
 			response = hub.execute_get(x['href'] + "?limit=9999", custom_headers=custom_headers)
 			vulns = response.json().get('items', [])
 			for vuln in vulns:
 				total += 1
 				if vuln['source'] == 'NVD':
-					for x in vuln['_meta']['links']:
-						if x['rel'] == 'related-vulnerabilities':
-							if x['label'] == 'BDSA':
+					for y in vuln['_meta']['links']:
+						if y['rel'] == 'related-vulnerabilities':
+							if y['label'] == 'BDSA':
 								# print("{} has BDSA which disagrees with component version - potential false positive".format(vuln['name']))
 								if vuln['name'] not in cve_list:
 									cve_list.append(vuln['name'])

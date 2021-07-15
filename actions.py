@@ -175,15 +175,16 @@ def check_cves(bd, projverurl, comps, vulns):
                 # custom_headers = {'Accept': 'application/vnd.blackducksoftware.vulnerability-4+json'}
                 # response = hub.execute_get(x['href'] + "?limit=9999", custom_headers=custom_headers)
                 # vulns = response.json().get('items', [])
-                cvulns = bd.get_json(x['href'])
+                cvulns = bd.get_json(x['href'] + "?limit=3000")
 
                 for vuln in cvulns['items']:
                     total += 1
                     if vuln['source'] == 'NVD':
-                        for x in vuln['_meta']['links']:
-                            if x['rel'] == 'related-vulnerabilities':
-                                if x['label'] == 'BDSA':
-                                    # print("{} has BDSA which disagrees with component version - potential false positive".format(vuln['name']))
+                        for y in vuln['_meta']['links']:
+                            if y['rel'] == 'related-vulnerabilities':
+                                if y['label'] == 'BDSA':
+                                    # print("{} has BDSA which disagrees with component version - potential false
+                                    # positive".format(vuln['name']))
                                     if vuln['name'] not in cve_list:
                                         cve_list.append(vuln['name'])
                                     num += 1
