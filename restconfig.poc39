@@ -1,0 +1,6 @@
+{
+  "baseurl": "https://poc39.blackduck.synopsys.com",
+  "api_token": "MmE1OTdjOGMtOTJlMC00ZWUxLTljMTAtOWY5ZTUyYTQ4ODk5OmVhYTJjMTEzLWJiMDItNDdiOC1iY2JkLTMyYjE1YWQzZWZlMQ==",
+  "insecure": true,
+  "debug": false
+}
