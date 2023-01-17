@@ -234,6 +234,8 @@ def create_summary_vulnfig(vulndata):
     vulndf = vulndata.drop_duplicates(subset=["vulnerabilityWithRemediation.vulnerabilityName"],
                                       keep="first", inplace=False)
 
+    if (vulndf is None or len(vulndf.index) == 0):
+            return fig
     vulndf = vulndf[vulndf[
                 'vulnerabilityWithRemediation.remediationStatus'].isin(['NEW', 'NEEDS_REVIEW', 'REMEDIATION_REQUIRED'])
              ].sort_values(by=['vulnerabilityWithRemediation.overallScore'], ascending=False)
@@ -243,7 +245,13 @@ def create_summary_vulnfig(vulndata):
     vulns_secrisk = df.groupby(by="vulnerabilityWithRemediation.severity").componentVersion.count()
     # annotations = []
 
-    vulnvals = [vulns_secrisk['CRITICAL'], vulns_secrisk['HIGH'], vulns_secrisk['MEDIUM'], vulns_secrisk['LOW']]
+    # vulnvals = [vulns_secrisk['CRITICAL'], vulns_secrisk['HIGH'], vulns_secrisk['MEDIUM'], vulns_secrisk['LOW']]
+    vulnvals = []
+    for val in ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']:
+        if val in vulns_secrisk:
+            vulnvals.append(vulns_secrisk[val])
+        else:
+            vulnvals.append(0)
 
     # indent = 0
     # colseq = [seccolors[1], seccolors[6], seccolors[7], seccolors[23], seccolors[0]]
@@ -490,25 +498,24 @@ def create_summary_vulntoptable(vulndata, id):
 
 
 def create_summary_vulnsrecenttable(bd, projverurl, vulndata, vername, days):
-    if projverurl != '':
+    if projverurl != '' and vulndata is not None and len(vulndata.index) > 0:
         # comptimelist, vulntimelist, scans, vulns, vuln_origs = trend.proc_journals(bd, projverurl, vername, days)
-        vdata = vulndata
+        # vdata = vulndata
         # if len(vulns) > 0:
-        if True:
-            vdata = vulndata[vulndata[
-                'vulnerabilityWithRemediation.remediationStatus'].isin(['NEW', 'NEEDS_REVIEW', 'REMEDIATION_REQUIRED'])
-                    ].sort_values(by=['vulnerabilityWithRemediation.overallScore'], ascending=False)
-            # matchvulns = vdata[vdata['vulnerabilityWithRemediation.vulnerabilityName'].isin(vulns)]
-            # for vuln, orig in zip(vulns, vuln_origs):
-            #     matchvulns = matchvulns[(matchvulns['vulnerabilityWithRemediation.vulnerabilityName'] != vuln) &
-            #                             (matchvulns['componentVersionOriginId'] != orig)]
-            #
-            # # matchvulns has list of vulns to remove from the vulns list
-            vdata = vdata.drop_duplicates(subset=["vulnerabilityWithRemediation.vulnerabilityName"],
-                                          keep="first", inplace=False)
-            df = vdata.reset_index()
+        vdata = vulndata[vulndata[
+            'vulnerabilityWithRemediation.remediationStatus'].isin(['NEW', 'NEEDS_REVIEW', 'REMEDIATION_REQUIRED'])
+                ].sort_values(by=['vulnerabilityWithRemediation.overallScore'], ascending=False)
+        # matchvulns = vdata[vdata['vulnerabilityWithRemediation.vulnerabilityName'].isin(vulns)]
+        # for vuln, orig in zip(vulns, vuln_origs):
+        #     matchvulns = matchvulns[(matchvulns['vulnerabilityWithRemediation.vulnerabilityName'] != vuln) &
+        #                             (matchvulns['componentVersionOriginId'] != orig)]
+        #
+        # # matchvulns has list of vulns to remove from the vulns list
+        vdata = vdata.drop_duplicates(subset=["vulnerabilityWithRemediation.vulnerabilityName"],
+                                      keep="first", inplace=False)
+        df = vdata.reset_index()
 
-            return create_vulntable(vdata, 'summary_vulnsrecenttable')
+        return create_vulntable(vdata, 'summary_vulnsrecenttable')
     return 'None'
 
 

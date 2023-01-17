@@ -328,12 +328,14 @@ def vulnactions(bd, vulnjson, action, origdata, vdata, rows):
         thisvuln = vdata[row]
 
         if action in vulnaction_dict.keys() and \
+                'vulnerabilityWithRemediation.remediationStatus' in thisvuln and \
                 thisvuln['vulnerabilityWithRemediation.remediationStatus'] != action:
             entry = vulnaction_dict[action]
             # Find entry in original table
             foundrow = -1
             for origrow, origcomp in enumerate(origdata):
                 if (origcomp['componentVersion'] == thisvuln['componentVersion']) and \
+                        'vulnerabilityWithRemediation.vulnerabilityName' in thisvuln and \
                         (origcomp['vulnerabilityWithRemediation.vulnerabilityName'] ==
                          thisvuln['vulnerabilityWithRemediation.vulnerabilityName']) and \
                         (origcomp['componentVersionOriginId'] == thisvuln['componentVersionOriginId']):
